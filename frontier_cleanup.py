@@ -77,7 +77,6 @@ class FrontierCleaner:
         found_dirs = []
         # if the search_path itself is a image dir, add it to beginning of
         # results
-        print(self.search_path)
         if self.search_path.is_dir() and \
                 re.match(self.IMAGE_DIR_PATTERN, self.search_path.name):
             found_dirs.append(self.search_path)
