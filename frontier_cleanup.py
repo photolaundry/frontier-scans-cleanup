@@ -131,7 +131,7 @@ class FrontierCleaner:
         (such as Lightroom).
 
         We set the capture times of the files as such:
-            1st image gets the current timestamp.
+            1st image gets the same capture time as its file modified time.
             2nd image gets the 1st image's capture time, but +1 millisecond.
             3rd image gets the 1st image's capture time, but +2 milliseconds.
 
@@ -154,6 +154,7 @@ class FrontierCleaner:
         SubSec (millisecond) of that timestamp as its creation timestamp.
         (FIXME: this assumes there's at most 1000 images in the directory).
         """
+        first_image_mtime = None
         image_num = 0
         for image_path in sorted(images_dir.glob("*")):
             filename = image_path.stem  # the filename without extension
@@ -172,11 +173,15 @@ class FrontierCleaner:
             # only bump counter for jpgs and tiffs
             image_num += 1
 
+            if not first_image_mtime:
+                first_image_mtime = datetime.fromtimestamp(
+                    image_path.stat().st_mtime)
+
             # image ordering is preserved in the capture time saved,
             # see above docstring
-            datetime_original = base_timestamp.strftime(
+            datetime_original = first_image_mtime.strftime(
                 self.EXIF_DATETIME_STR_FORMAT)
-            datetime_digitized = base_timestamp.strftime(
+            datetime_digitized = first_image_mtime.strftime(
                 self.EXIF_DATETIME_STR_FORMAT)
             # There's 3 decimal places for the milliseconds, so zero-pad to 3
             subsec_time_original = f"{image_num - 1:0>3d}"
