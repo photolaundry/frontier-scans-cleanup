@@ -90,13 +90,17 @@ class FrontierCleaner:
         Renames the images in the images_dir directory in the format:
             R{roll_number}F{frame_number}.jpg (or .tif)
 
+        Since the Frontier doesn't seem to save the frame names as read by the
+        DX code reader, its filenames are always frame numbers. We can rename
+        these filenames to be sequential since the Frontier sometimes numbers
+        these wrong, skipping frames 02-06 often.
         images_dir is a path object that represents the directory of images to
         operate on
         """
         # the roll number can be extracted from the directory name
         match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
         roll_number = match.group("roll_number")
-        for image_path in sorted(images_dir.glob("*")):
+        for image_number, image_path in enumerate(sorted(images_dir.glob("*"))):
             filename = image_path.stem  # the filename without extension
             prefix = image_path.parent  # the full path of the parent dir
             suffix = image_path.suffix  # the extension including the .
@@ -114,7 +118,7 @@ class FrontierCleaner:
             # convert roll number to an int, and then zero pad it as desired
             formatted_roll_number = \
                 f"{int(roll_number):0>{self.roll_padding}d}"
-            frame_number = match.group("frame_number")
+            frame_number = image_number + 1  # since image_number is 0-indexed
             new_filename = f"R{formatted_roll_number}" \
                 f"F{int(frame_number):0>{self.frame_padding}d}"
 
@@ -124,10 +128,10 @@ class FrontierCleaner:
 
     def fix_timestamps(self, images_dir, base_timestamp):
         """
-        Adds the DateTimeOriginal EXIF tag to all images, using the current
-        timestamp as a starting point. This fixes the issue where rotating a
-        file in Finder or Adobe Bridge will adjust the image's modified
-        timestamp, messing up programs that sort by Capture Time
+        Adds the DateTimeOriginal EXIF tag to all images, using the first
+        file's timestamp as a starting point. This fixes the issue where
+        rotating a file in Finder or Adobe Bridge will adjust the image's
+        modified timestamp, messing up programs that sort by Capture Time
         (such as Lightroom).
 
         We set the capture times of the files as such:
@@ -142,10 +146,7 @@ class FrontierCleaner:
 
         The adding of milliseconds helps preserve the sorting order in programs
         like Lightroom since the ordering is also enforced by the capture time
-        set.  If all files got the same capture time, and we were saving the
-        frame name in the filenames, we would get cases where ###, 00, 0, E, XA
-        frames get out of order, because LR would have to use filename to sort
-        since they'd all have the same capture time.
+        set.
 
         images_dir is a path object that represents the directory of images to
         operate on.
