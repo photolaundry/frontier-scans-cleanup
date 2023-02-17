@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 import argparse
 import exiftool
 import re
-import shutil
 
 
 # assume folder structure:
@@ -130,7 +129,6 @@ class FrontierCleaner:
             # destination dir to save the images to
             dest_dir = parent_dir / \
                     order_number / date_dir_number / formatted_roll_number
-            dest_dir.mkdir(parents=True, exist_ok=True)
         else:
             # reuse the same directory
             dest_dir = first_image_path.parent
@@ -157,6 +155,7 @@ class FrontierCleaner:
 
             new_filepath = dest_dir / f"{new_filename}{suffix}"
             print(f"{image_path.name} => {new_filename}{suffix}")
+            dest_dir.mkdir(parents=True, exist_ok=True)
             image_path.rename(new_filepath)
 
         if self.reorg:
