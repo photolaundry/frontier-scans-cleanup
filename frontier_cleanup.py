@@ -161,7 +161,7 @@ class FrontierCleaner:
         if self.reorg:
             # delete the original directory now
             try:
-                first_iamge_path.parent.rmdir()
+                first_image_path.parent.rmdir()
             except OSError as err:
                 print(f"Directory not empty, skipping deletion: {images_dir}")
 
