@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import argparse
 import exiftool
 import re
+import shutil
 
 
 # assume folder structure:
@@ -31,6 +32,7 @@ class FrontierCleaner:
     def __init__(self,
                  exiftool_client,
                  search_path=None,
+                 reorg=False,
                  roll_padding=4,
                  frame_padding=4):
         """
@@ -38,6 +40,8 @@ class FrontierCleaner:
         to perform all EXIF modifications required.
         search_path is a str representing the path to search for images to fix.
         If not provided, search_path will be the current working directory.
+        reorg is whether to reorganize all scans into directories based on
+        order number and date. Defaults to False.
         roll_padding is how many characters of zero padding to add for the
         roll number
         frame_padding is how many characters of zero padding to add for the
@@ -50,6 +54,7 @@ class FrontierCleaner:
         else:
             self.search_path = Path(search_path)
 
+        self.reorg = reorg
         self.roll_padding = roll_padding
         self.frame_padding = frame_padding
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
@@ -97,12 +102,43 @@ class FrontierCleaner:
         images_dir is a path object that represents the directory of images to
         operate on
         """
+        images_glob = sorted(images_dir.glob("*"))
+        if not images_glob:
+            print(f"No images found, skipping: {images_dir}")
+            return
+
         # the roll number can be extracted from the directory name
         match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
         roll_number = match.group("roll_number")
-        for image_number, image_path in enumerate(sorted(images_dir.glob("*"))):
+        # convert roll number to an int, and then zero pad it as desired
+        formatted_roll_number = \
+            f"{int(roll_number):0>{self.roll_padding}d}"
+
+        first_image_path = images_glob[0]
+        if self.reorg:
+            # the order number can be extracted from the directory name
+            order_number = match.group("order_number")
+
+            # find the date from the mtime of the first image
+            first_image_mtime = datetime.fromtimestamp(
+                first_image_path.stat().st_mtime)
+            date_dir_number = first_image_mtime.strftime("%Y%m%d")
+
+            # the parent dir that the image_dir is in
+            parent_dir = first_image_path.parent.parent
+
+            # destination dir to save the images to
+            dest_dir = parent_dir / \
+                    order_number / date_dir_number / formatted_roll_number
+            dest_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            # reuse the same directory
+            dest_dir = first_image_path.parent
+
+        print(f"saving to: {dest_dir}")
+
+        for image_number, image_path in enumerate(images_glob):
             filename = image_path.stem  # the filename without extension
-            prefix = image_path.parent  # the full path of the parent dir
             suffix = image_path.suffix  # the extension including the .
 
             if str(suffix).lower() not in (".jpg", ".tif") or \
@@ -115,16 +151,20 @@ class FrontierCleaner:
                     f"image filename doesn't match expected format: "
                     f"{image_path}")
 
-            # convert roll number to an int, and then zero pad it as desired
-            formatted_roll_number = \
-                f"{int(roll_number):0>{self.roll_padding}d}"
             frame_number = image_number + 1  # since image_number is 0-indexed
             new_filename = f"R{formatted_roll_number}" \
                 f"F{int(frame_number):0>{self.frame_padding}d}"
 
-            new_filepath = prefix.joinpath(f"{new_filename}{suffix}")
+            new_filepath = dest_dir / f"{new_filename}{suffix}"
             print(f"{image_path.name} => {new_filename}{suffix}")
             image_path.rename(new_filepath)
+
+        if self.reorg:
+            # delete the original directory now
+            try:
+                first_iamge_path.parent.rmdir()
+            except OSError as err:
+                print(f"Directory not empty, skipping deletion: {images_dir}")
 
     def fix_timestamps(self, images_dir, base_timestamp):
         """
@@ -225,6 +265,12 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--reorg", action="store_true", default=False,
+        help="whether to reorganize the scans into order and date directories "
+        "or not. default: False"
+    )
+
+    parser.add_argument(
         "--roll_padding", type=int, default=4,
         help="how many characters of zero padding to add for the roll number. "
         "default: 4"
@@ -245,6 +291,7 @@ if __name__ == "__main__":
         cleaner = FrontierCleaner(
             exiftool_client=et,
             search_path=args.search_path,
+            reorg=args.reorg,
             roll_padding=args.roll_padding,
             frame_padding=args.frame_padding)
         cleaner.clean()
