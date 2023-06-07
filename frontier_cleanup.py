@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime, timedelta
+from wand.image import Image
 
 import argparse
 import exiftool
@@ -66,6 +67,7 @@ class FrontierCleaner:
                 # collide by separting their timestamps 1 second apart
                 self.fix_timestamps(image_dir,
                                     base_timestamp + timedelta(seconds=index))
+                self.convert_bmps_to_tifs(image_dir)
                 self.rename_images(image_dir)
             except ValueError as e:
                 print(e)
@@ -88,6 +90,30 @@ class FrontierCleaner:
             self.search_path.glob("**/" + self.IMAGE_DIR_GLOB_PATTERN))
 
         return found_dirs
+
+    def convert_bmps_to_tifs(images_dir):
+        """
+        Converts all BMP files to compressed TIF files (with zip compression).
+        images_dir is a path object that represents the directory of images to
+        operate on
+        """
+        print("converting bmps to tifs...")
+        for image_path in sorted(images_dir.glob("*")):
+            filename = image_path.stem  # the filename without extension
+            suffix = image_path.suffix  # the extension including the .
+
+            if str(suffix).lower() != ".bmp" or not image_path.is_file():
+                continue
+
+            print(f"converting {image_path}")
+            bmp_image = Image(filename=image_path)
+            with bmp_image.convert("tif") as tif_image:
+                tif_image.compression = "zip"
+                tif_filepath = image_path.with_suffix(".tif")
+                tif_image.save(tif_filepath)
+
+            # delete original bmps
+            image_path.unlink()
 
     def rename_images(self, images_dir):
         """
