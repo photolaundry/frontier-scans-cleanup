@@ -165,7 +165,7 @@ class FrontierCleaner:
             filename = image_path.stem  # the filename without extension
             suffix = image_path.suffix  # the extension including the .
 
-            if str(suffix).lower() not in (".jpg", ".tif") or \
+            if str(suffix).lower() not in (".jpg", ".tif", ".bmp") or \
                     not image_path.is_file():
                 continue
 
