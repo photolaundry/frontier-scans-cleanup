@@ -7,14 +7,14 @@ import re
 
 
 # assume folder structure:
-# 000001007466/  <- order + roll number
+# YourName007466/  <- order id + roll number
 #   000001.jpg  <- frame number
 #   000002.jpg  <- frame number
 #   000003.jpg  <- frame number
 #   ...
-# 000001007467/
+# YourName007467/
 #   ...
-# 000001007468/
+# OtherName007468/
 #   ...
 
 
@@ -22,9 +22,9 @@ class FrontierCleaner:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = \
-        r"(?P<order_number>\d{6})" \
+        r"(?P<order_id>.{10})" \
         r"(?P<roll_number>\d{6})"
-    IMAGE_DIR_GLOB_PATTERN = "[0-9]" * (6 + 6)
+    IMAGE_DIR_GLOB_PATTERN = "?" * 10 + "[0-9]" * 6
     IMAGE_NAME_PATTERN = \
         r"(?P<frame_number>\d{6})"
 
@@ -37,7 +37,7 @@ class FrontierCleaner:
         search_path is a str representing the path to search for images to fix.
         If not provided, search_path will be the current working directory.
         reorg is whether to reorganize all scans into directories based on
-        order number and date. Defaults to False.
+        order id and date. Defaults to False.
         roll_padding is how many characters of zero padding to add for the
         roll number
         frame_padding is how many characters of zero padding to add for the
@@ -66,9 +66,8 @@ class FrontierCleaner:
     def find_all_image_dirs(self):
         """
         The Frontier exports images into a dir for each roll, where the
-        directory name is the 6-digit order number followed by the 6-digit roll
-        number.
-        So we just need to find all directories that are named with 12 digits.
+        directory name is the order id (up to 10 of any character) followed by
+        the 6-digit roll number.
         """
         found_dirs = []
         # if the search_path itself is a image dir, add it to beginning of
@@ -81,7 +80,7 @@ class FrontierCleaner:
 
         return found_dirs
 
-    def convert_bmps_to_tifs(images_dir):
+    def convert_bmps_to_tifs(self, images_dir):
         """
         Converts all BMP files to compressed TIF files (with zip compression).
         images_dir is a path object that represents the directory of images to
@@ -98,7 +97,7 @@ class FrontierCleaner:
             print(f"converting {image_path}")
             bmp_image = Image(filename=image_path)
             with bmp_image.convert("tif") as tif_image:
-                tif_image.compression = "zip"
+                tif_image.compression = "lzw"
                 tif_filepath = image_path.with_suffix(".tif")
                 tif_image.save(tif_filepath)
 
@@ -131,8 +130,8 @@ class FrontierCleaner:
 
         first_image_path = images_glob[0]
         if self.reorg:
-            # the order number can be extracted from the directory name
-            order_number = match.group("order_number")
+            # the order id can be extracted from the directory name
+            order_id = match.group("order_id")
 
             # find the date from the mtime of the first image
             first_image_mtime = datetime.fromtimestamp(
@@ -144,7 +143,7 @@ class FrontierCleaner:
 
             # destination dir to save the images to
             dest_dir = parent_dir / \
-                    order_number / date_dir_number / formatted_roll_number
+                    order_id / date_dir_number / formatted_roll_number
         else:
             # reuse the same directory
             dest_dir = first_image_path.parent
