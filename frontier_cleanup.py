@@ -22,9 +22,9 @@ class FrontierCleaner:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = \
-        r"(?P<order_id>.{10})" \
+        r"(?P<order_id>.{1,10})" \
         r"(?P<roll_number>\d{6})"
-    IMAGE_DIR_GLOB_PATTERN = "?" * 10 + "[0-9]" * 6
+    IMAGE_DIR_GLOB_PATTERN = "*" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = \
         r"(?P<frame_number>\d{6})"
 
