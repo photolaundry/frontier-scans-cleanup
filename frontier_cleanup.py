@@ -39,9 +39,9 @@ class FrontierCleaner:
         reorg is whether to reorganize all scans into directories based on
         order id and date. Defaults to False.
         roll_padding is how many characters of zero padding to add for the
-        roll number
+        roll number.
         frame_padding is how many characters of zero padding to add for the
-        frame number
+        frame number.
         """
         if not search_path:
             self.search_path = Path.cwd()
@@ -70,13 +70,14 @@ class FrontierCleaner:
         the 6-digit roll number.
         """
         found_dirs = []
-        # if the search_path itself is a image dir, add it to beginning of
-        # results
-        if self.search_path.is_dir() and \
-                re.match(self.IMAGE_DIR_PATTERN, self.search_path.name):
-            found_dirs.append(self.search_path)
+        if not self.search_path.is_dir():
+            raise ValueError("given path is not a directory")
+
         found_dirs += sorted(
-            self.search_path.glob("**/" + self.IMAGE_DIR_GLOB_PATTERN))
+            filter(lambda x: x.is_dir(),
+                   self.search_path.glob(self.IMAGE_DIR_GLOB_PATTERN)
+            )
+        )
 
         return found_dirs
 
