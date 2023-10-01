@@ -55,7 +55,7 @@ class FrontierCleaner:
 
     def clean(self):
         base_timestamp = datetime.now()
-        for index, image_dir in enumerate(self.find_all_image_dirs()):
+        for image_dir in self.find_all_image_dirs():
             try:
                 self.convert_bmps_to_tifs(image_dir)
                 self.rename_images(image_dir)
@@ -100,7 +100,7 @@ class FrontierCleaner:
             with bmp_image.convert("tif") as tif_image:
                 tif_image.compression = "lzw"
                 tif_filepath = image_path.with_suffix(".tif")
-                tif_image.save(tif_filepath)
+                tif_image.save(filename=tif_filepath)
 
             # delete original bmps
             image_path.unlink()
