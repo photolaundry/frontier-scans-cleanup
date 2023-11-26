@@ -32,15 +32,15 @@ class FrontierCleaner:
                  search_path=None,
                  reorg=False,
                  roll_padding=4,
-                 frame_padding=4):
+                 frame_padding=2):
         """
         search_path is a str representing the path to search for images to fix.
         If not provided, search_path will be the current working directory.
         reorg is whether to reorganize all scans into directories based on
         order id and date. Defaults to False.
-        roll_padding is how many characters of zero padding to add for the
+        roll_padding is how many characters of zero padding to use for the
         roll number.
-        frame_padding is how many characters of zero padding to add for the
+        frame_padding is how many characters of zero padding to use for the
         frame number.
         """
         if not search_path:

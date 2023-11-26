@@ -2,15 +2,16 @@
 TODO: fill out examples of what Frontier settings to use, as well as which versions of the software to use
 
 ## What the problem is
-When using a Fujifilm Frontier scanner, the images that it outputs have some broken metadata. They also often have the wrong timestamps too. Specifically, the files are missing the DateTimeOriginal and related EXIF tags. This means that any image-editing software will use the last modified date from the filesystem as the "capture date," meaning rotating images or simply renaming images causes images to jump forward in time. This usually translates to Lightroom missing up the order of the photos by the time they are imported.
+For certain versions (e.g. A1+C4/C5) of the Fujifilm Frontier scanner software, you can only export BMPs (no TIFFs). Additionally, the output folder organization gets messy, with each order taking up a folder at the top-level, and no sorting by date or order ID (e.g. customer). Another issue is the DX reader for frame numbers gets confused sometimes, and the frame numbers are off.
 
 ## What this script does
-The script does 2 main things:
- 1. Assigns a more reasonable DateTimeOriginal to each image, by using the current timestamp for the first image, and then adding 1 millisecond to that for each subsequent image. This preserves the sorting order in the same order they were scanned. Essentially, it's as if all the images were scanned in quick succession, 1 millisecond apart. There's additional logic to make sure different rolls don't collide on their timestamps.
- 3. Renames the images from `000001008411/000001.jpg` to `R8411F1.jpg`, a simplification into this format: `R{roll_number}F{frame_number}.jpg`.
+ 1. Converts any BMPs into compressed lossless TIFF.
+ 2. Renames the images from `Customer001234/000001.jpg` to `R1234F1.jpg`, a simplification into this format: `R{roll_number}F{frame_number}.jpg`.
+ 3. Reindexes the frame numbers for each roll starting at 1, fixing the wrong frame numbers from a bad DX reader.
+ 4. Optionally reorganizes scan folders into: `<order_id>/<date>/<order_number>/<frame_number>.jpg` format.
 
 ## Requirements
-The script was written in Python 3.9, but likely works for Python 3.6 and newer. Use `pip install -r requirements/default.txt` to install the required python packages. In addition, exiftool must be installed and available in the PATH as `exiftool`.
+The script was written and tested in Python 3.9, but likely works for Python 3.6 and newer. Use `pip install -r requirements/default.txt` to install the required python packages. In addition, ImageMagick must also be installed. If you need help installing ImageMagick, go *[here](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)*.
 
 ## Run
-Run `python frontier_cleanup.py` in the directory you wish to search for Frontier scans from. Alternatively, you can specify the location as an argument: `python frontier_cleanup.py 20211226/00007466/`.
+Run `python frontier_cleanup.py` in the directory you've directly exported all your Frontier scans to (e.g. the directory you exported to the Writing tab in the C4/C5 software). Alternatively, you can specify the location as an argument: `python frontier_cleanup.py path/to/frontier_scans/`.
