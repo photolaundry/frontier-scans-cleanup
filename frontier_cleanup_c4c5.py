@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from wand.image import Image
 
 import argparse
@@ -19,8 +19,6 @@ import re
 
 
 class FrontierCleaner:
-    EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
-    EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = \
         r"(?P<order_id>.{1,10})" \
         r"(?P<roll_number>\d{6})"
@@ -54,7 +52,6 @@ class FrontierCleaner:
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
 
     def clean(self):
-        base_timestamp = datetime.now()
         for image_dir in self.find_all_image_dirs():
             try:
                 self.convert_bmps_to_tifs(image_dir)
@@ -76,7 +73,7 @@ class FrontierCleaner:
         found_dirs += sorted(
             filter(lambda x: x.is_dir(),
                    self.search_path.glob(self.IMAGE_DIR_GLOB_PATTERN)
-            )
+                   )
         )
 
         return found_dirs
@@ -89,7 +86,7 @@ class FrontierCleaner:
         """
         print("converting bmps to tifs...")
         for image_path in sorted(images_dir.glob("*")):
-            filename = image_path.stem  # the filename without extension
+            _ = image_path.stem  # the filename without extension
             suffix = image_path.suffix  # the extension including the .
 
             if str(suffix).lower() != ".bmp" or not image_path.is_file():
@@ -144,7 +141,7 @@ class FrontierCleaner:
 
             # destination dir to save the images to
             dest_dir = parent_dir / \
-                    order_id / date_dir_number / formatted_roll_number
+                order_id / date_dir_number / formatted_roll_number
         else:
             # reuse the same directory
             dest_dir = first_image_path.parent
@@ -178,14 +175,14 @@ class FrontierCleaner:
             # delete the original directory now
             try:
                 first_image_path.parent.rmdir()
-            except OSError as err:
+            except OSError:
                 print(f"Directory not empty, skipping deletion: {images_dir}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Sanitizes Frontier scan files by renaming images and "
-        "correcting EXIF metadata."
+        "optionally reorganizes them into order id directories."
     )
     parser.add_argument(
         "search_path", nargs="?", default=None,
