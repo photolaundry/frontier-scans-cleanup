@@ -3,6 +3,7 @@ from datetime import datetime
 from wand.image import Image
 
 import argparse
+import itertools
 import re
 
 
@@ -27,13 +28,14 @@ class FrontierCleaner:
         r"(?P<frame_number>\d{6})"
 
     def __init__(self,
-                 search_path=None,
+                 frontier_export_path=None,
                  reorg=False,
                  roll_padding=4,
                  frame_padding=2):
         """
-        search_path is a str representing the path to search for images to fix.
-        If not provided, search_path will be the current working directory.
+        frontier_export_path is the path that the Frontier exporting software
+        directly exports to. If not provided, frontier_export_path will default
+        to the current working directory.
         reorg is whether to reorganize all scans into directories based on
         order id and date. Defaults to False.
         roll_padding is how many characters of zero padding to use for the
@@ -41,10 +43,10 @@ class FrontierCleaner:
         frame_padding is how many characters of zero padding to use for the
         frame number.
         """
-        if not search_path:
-            self.search_path = Path.cwd()
+        if not frontier_export_path:
+            self.frontier_export_path = Path.cwd()
         else:
-            self.search_path = Path(search_path)
+            self.frontier_export_path = Path(frontier_export_path)
 
         self.reorg = reorg
         self.roll_padding = roll_padding
@@ -67,12 +69,12 @@ class FrontierCleaner:
         the 6-digit roll number.
         """
         found_dirs = []
-        if not self.search_path.is_dir():
+        if not self.frontier_export_path.is_dir():
             raise ValueError("given path is not a directory")
 
         found_dirs += sorted(
             filter(lambda x: x.is_dir(),
-                   self.search_path.glob(self.IMAGE_DIR_GLOB_PATTERN)
+                   self.frontier_export_path.glob(self.IMAGE_DIR_GLOB_PATTERN)
                    )
         )
 
@@ -107,21 +109,25 @@ class FrontierCleaner:
         Renames the images in the images_dir directory in the format:
             R{roll_number}F{frame_number}.jpg (or .tif)
 
-        Since the Frontier doesn't seem to save the frame names as read by the
-        DX code reader, its filenames are always frame numbers. We can rename
-        these filenames to be sequential since the Frontier sometimes numbers
-        these wrong, skipping frames 02-06 often.
+        Since the C4/C5 software doesn't seem to save the frame names as read
+        by the DX code reader, its filenames are always frame numbers. We can
+        rename these filenames to be sequential since the Frontier sometimes
+        numbers these wrong, skipping frames 02-06 often.
         images_dir is a path object that represents the directory of images to
         operate on
         """
-        images_glob = sorted(images_dir.glob("*"))
+        images_glob = sorted(itertools.chain(
+            images_dir.glob("*.jpg"),
+            images_dir.glob("*.bmp"),
+            images_dir.glob("*.JPG"),
+            images_dir.glob("*.BMP")))
         if not images_glob:
             print(f"No images found, skipping: {images_dir}")
             return
 
         # the roll number can be extracted from the directory name
-        match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
-        roll_number = match.group("roll_number")
+        dir_match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
+        roll_number = dir_match.group("roll_number")
         # convert roll number to an int, and then zero pad it as desired
         formatted_roll_number = \
             f"{int(roll_number):0>{self.roll_padding}d}"
@@ -129,21 +135,18 @@ class FrontierCleaner:
         first_image_path = images_glob[0]
         if self.reorg:
             # the order id can be extracted from the directory name
-            order_id = match.group("order_id")
+            order_id = dir_match.group("order_id")
 
             # find the date from the mtime of the first image
             first_image_mtime = datetime.fromtimestamp(
                 first_image_path.stat().st_mtime)
             date_dir_number = first_image_mtime.strftime("%Y%m%d")
 
-            # the parent dir that the image_dir is in
-            parent_dir = first_image_path.parent.parent
-
-            # destination dir to save the images to
-            dest_dir = parent_dir / \
+            # destination dir to save the images to (same dir as Frontier)
+            dest_dir = self.frontier_export_path / \
                 order_id / date_dir_number / formatted_roll_number
         else:
-            # reuse the same directory
+            # reuse the same directory as the original image
             dest_dir = first_image_path.parent
 
         print(f"saving to: {dest_dir}")
@@ -152,12 +155,11 @@ class FrontierCleaner:
             filename = image_path.stem  # the filename without extension
             suffix = image_path.suffix  # the extension including the .
 
-            if str(suffix).lower() not in (".jpg", ".tif", ".bmp") or \
-                    not image_path.is_file():
+            if not image_path.is_file():
                 continue
 
-            match = self.image_name_matcher.match(filename)
-            if not match:
+            img_match = self.image_name_matcher.match(filename)
+            if not img_match:
                 raise ValueError(
                     f"image filename doesn't match expected format: "
                     f"{image_path}")
@@ -172,9 +174,9 @@ class FrontierCleaner:
             image_path.rename(new_filepath)
 
         if self.reorg:
-            # delete the original directory now
+            # delete the images_dir now that all images are renamed and moved
             try:
-                first_image_path.parent.rmdir()
+                images_dir.rmdir()
             except OSError:
                 print(f"Directory not empty, skipping deletion: {images_dir}")
 
@@ -185,9 +187,10 @@ if __name__ == "__main__":
         "optionally reorganizes them into order id directories."
     )
     parser.add_argument(
-        "search_path", nargs="?", default=None,
-        help="The path to search for Frontier scan files. If not provided, "
-        "will use current working directory."
+        "frontier_export_path", nargs="?", default=None,
+        help="The path to the directory that Frontier exporting software "
+        "directly exports to. If not provided, will assume the current "
+        "working directory."
     )
 
     parser.add_argument(
@@ -214,7 +217,7 @@ if __name__ == "__main__":
     # to not leave behind the "original" files
     common_args = ["-G", "-n", "-overwrite_original"]
     cleaner = FrontierCleaner(
-        search_path=args.search_path,
+        frontier_export_path=args.frontier_export_path,
         reorg=args.reorg,
         roll_padding=args.roll_padding,
         frame_padding=args.frame_padding)
