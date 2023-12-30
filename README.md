@@ -1,15 +1,15 @@
 # Fujifilm Frontier scan file cleanup
-This script takes Fujifilm Frontier scan files and cleans up the filenames and optionally the folder structure. Currently this script works only with the C4/C5 exporting software.
+This script takes Fujifilm Frontier scan files and cleans up the filenames and optionally reorganizes the folder structure. This script supports either C4/C5 or MS01 exporting software. FE or PIC 2.6 isn't supported at this moment.
 
 ## What the problem is
 For certain versions (e.g. A1+C4/C5) of the Fujifilm Frontier scanner software, you can only export BMPs (no TIFFs). Additionally, the output folder organization gets messy, with each order taking up a folder at the top-level, and no sorting by date or order ID (e.g. customer name). Another issue is the export software confuses the frame numbers, and the resulting filenames are off (e.g. 000001, 000007, 000008, etc).
 
-Also the exporting software doesn't seem to set the correct DateTime EXIF tags for any of the images, so photo editing/organizing software can have trouble determining when the photos were scanned. This script adds these tags based on the file modification time, so the files will be more compatible with modern photo apps.
+Lastly the exporting software doesn't seem to set the correct DateTime EXIF tags for any of the images, so photo editing/organizing software can have trouble determining when the photos were scanned. This script adds these tags based on the file modification time, so the files will be more compatible with modern photo apps.
 
 ## What this script does
- 1. (C4/C5 only) Converts any BMPs into compressed lossless TIFF.
+ 1. (C4/C5 only) Converts any BMPs into lossless compressed TIFF.
  2. Adds timestamp EXIF data to all images.
- 3. Renames the images from `Customer001234/000001.jpg` (C4/C5) or `Customer_001234/R1-001231-000001.JPG` (MS01) to `R1234F01.jpg`, a simplification into this format: `R{roll_number}F{frame_number}.jpg`.
+ 3. Renames the images from `Customer001234/000001.jpg` (C4/C5) or `Customer_001234/R1-00131-0001.JPG` (MS01) to `R1234F01.jpg`, a simplification into this format: `R{roll_number}F{frame_number}.jpg`.
  4. (C4/C5 only) Reindexes the frame numbers for each roll starting at 1, fixing the wrong frame numbers from a bad DX reader.
  5. Optionally reorganizes scan folders into: `<order_id>/<date>/<order_number>/<frame_number>.jpg` format.
 
