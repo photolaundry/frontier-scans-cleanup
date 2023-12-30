@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 wand = "*"
+pyexiftool = "*"
 
 [dev-packages]
 ipython = "*"

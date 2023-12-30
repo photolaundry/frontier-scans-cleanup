@@ -3,6 +3,7 @@ from datetime import datetime
 from wand.image import Image
 
 import argparse
+import exiftool
 import itertools
 import re
 
@@ -28,11 +29,14 @@ class FrontierCleaner:
         r"(?P<frame_number>\d{6})"
 
     def __init__(self,
+                 exiftool_client,
                  frontier_export_path=None,
                  reorg=False,
                  roll_padding=4,
                  frame_padding=2):
         """
+        exiftool_client is a exiftool.ExifToolHelper object that will be used
+        to perform all EXIF modifications required.
         frontier_export_path is the path that the Frontier exporting software
         directly exports to. If not provided, frontier_export_path will default
         to the current working directory.
@@ -43,6 +47,8 @@ class FrontierCleaner:
         frame_padding is how many characters of zero padding to use for the
         frame number.
         """
+        self.exiftool = exiftool_client
+
         if not frontier_export_path:
             self.frontier_export_path = Path.cwd()
         else:
@@ -57,6 +63,7 @@ class FrontierCleaner:
         for image_dir in self.find_all_image_dirs():
             try:
                 self.convert_bmps_to_tifs(image_dir)
+                self.fix_timestamps(image_dir)
                 self.rename_images(image_dir)
             except ValueError as e:
                 print(e)
@@ -82,7 +89,7 @@ class FrontierCleaner:
 
     def convert_bmps_to_tifs(self, images_dir):
         """
-        Converts all BMP files to compressed TIF files (with zip compression).
+        Converts all BMP files to compressed TIF files (with lzw compression).
         images_dir is a path object that represents the directory of images to
         operate on
         """
@@ -180,6 +187,96 @@ class FrontierCleaner:
             except OSError:
                 print(f"Directory not empty, skipping deletion: {images_dir}")
 
+    def fix_timestamps(self, images_dir):
+        """
+        Adds the DateTimeOriginal EXIF tag to all images, based on the
+        filesystem modified timestamp of the file. This fixes the issue where
+        rotating a file in Finder or Adobe Bridge will adjust the image's
+        modified timestamp, messing up programs that sort by Capture Time
+        (such as Lightroom).
+
+        We set the capture times of the files as such:
+            1st image gets the same capture time as its file modified time.
+            2nd image gets the 1st image's capture time, but +1 millisecond.
+            3rd image gets the 1st image's capture time, but +2 milliseconds.
+
+        We can't just save each image's modified time as its capture time
+        because the software doesn't guarantee that it saves the images in
+        sequential order, sometimes a later frame gets saved before an earlier
+        one.
+
+        The adding of milliseconds helps preserve the sorting order in programs
+        like Lightroom since the ordering is also enforced by the capture time
+        set.  If all files got the same capture time, and we were saving the
+        frame name in the filenames, we would get cases where ###, 00, 0, E, XA
+        frames get out of order, because LR would have to use filename to sort
+        since they'd all have the same capture time.
+
+        images_dir is a path object that represents the directory of images to
+        operate on.
+        """
+        first_image_mtime = None
+        image_num = 0
+        images_glob = sorted(itertools.chain(
+            images_dir.glob("**/*.jpg"),
+            images_dir.glob("**/*.tif"),
+            images_dir.glob("**/*.bmp"),
+            images_dir.glob("**/*.JPG"),
+            images_dir.glob("**/*.TIF"),
+            images_dir.glob("**/*.BMP")))
+        for image_path in images_glob:
+            filename = image_path.stem  # the filename without extension
+
+            if str(filename).startswith(".") or not image_path.is_file():
+                continue
+
+            img_match = self.image_name_matcher.match(filename)
+            if not img_match:
+                raise ValueError(
+                    f"image filename doesn't match expected format: "
+                    f"{image_path}")
+
+            # only bump counter for images that match
+            image_num += 1
+
+            if not first_image_mtime:
+                first_image_mtime = datetime.fromtimestamp(
+                    image_path.stat().st_mtime)
+
+            # image ordering is preserved in the capture time saved,
+            # see above docstring
+            datetime_original = first_image_mtime.strftime(
+                self.EXIF_DATETIME_STR_FORMAT)
+            datetime_digitized = first_image_mtime.strftime(
+                self.EXIF_DATETIME_STR_FORMAT)
+            # There's 3 decimal places for the milliseconds, so zero-pad to 3
+            subsec_time_original = f"{image_num - 1:0>3d}"
+            subsec_time_digitized = f"{image_num - 1:0>3d}"
+
+            tags_to_write = {
+                "EXIF:DateTimeOriginal": datetime_original,
+                "EXIF:DateTimeDigitized": datetime_digitized,
+                "EXIF:SubSecTimeOriginal": subsec_time_original,
+                "EXIF:SubSecTimeDigitized": subsec_time_digitized,
+            }
+
+            print(f"{image_path.name} getting datetime: "
+                  f"{datetime_original}:"
+                  f"{subsec_time_original}")
+
+            try:
+                result = self.exiftool.set_tags(str(image_path), tags_to_write)
+            except exiftool.exceptions.ExifToolExecuteError as err:
+                print(f"exiftool error while updating timestamps on image: "
+                      f"{image_path}")
+                print(f"error: {err.stdout}")
+            else:
+                result = result.strip()
+                if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
+                    print(f"failed to update timestamps on image: "
+                          f"{image_path}")
+                    print(f"exiftool: {result}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -216,9 +313,11 @@ if __name__ == "__main__":
     # the -G and -n are the default common args, -overwrite_original makes sure
     # to not leave behind the "original" files
     common_args = ["-G", "-n", "-overwrite_original"]
-    cleaner = FrontierCleaner(
-        frontier_export_path=args.frontier_export_path,
-        reorg=args.reorg,
-        roll_padding=args.roll_padding,
-        frame_padding=args.frame_padding)
-    cleaner.clean()
+    with exiftool.ExifToolHelper(common_args=common_args) as et:
+        cleaner = FrontierCleaner(
+            exiftool_client=et,
+            frontier_export_path=args.frontier_export_path,
+            reorg=args.reorg,
+            roll_padding=args.roll_padding,
+            frame_padding=args.frame_padding)
+        cleaner.clean()

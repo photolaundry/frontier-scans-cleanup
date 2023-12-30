@@ -1,1 +1,2 @@
 Wand==0.6.11
+PyExifTool==0.5.6
