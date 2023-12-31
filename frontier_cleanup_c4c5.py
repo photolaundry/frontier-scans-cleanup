@@ -21,6 +21,8 @@ import re
 
 
 class FrontierCleaner:
+    EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
+    EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = \
         r"(?P<order_id>.{1,10})" \
         r"(?P<roll_number>\d{6})"
