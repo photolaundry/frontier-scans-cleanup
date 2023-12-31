@@ -15,4 +15,5 @@ flake8 = "*"
 python_version = "3.9"
 
 [scripts]
-cleanup = "python frontier_cleanup.py"
+cleanup_c4c5 = "python frontier_cleanup_c4c5.py"
+cleanup_ms01 = "python frontier_cleanup_ms01.py"
