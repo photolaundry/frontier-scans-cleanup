@@ -33,7 +33,7 @@ class FrontierCleaner:
         r"(?P<roll_number>\d{6})"
     IMAGE_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = \
-        r"R1-\d{5}-(?P<frame_number>\d{4}A?)(?P<dup_suffix>_\d{4})?"
+        r"R1-\d{5}-(?P<frame_info>\d{1,4}A?(_\d{4})?)"
 
     def __init__(self,
                  exiftool_client,
@@ -92,7 +92,7 @@ class FrontierCleaner:
     def rename_images(self, images_dir):
         """
         Renames the images in the images_dir directory in the format:
-            R{roll_number}F{frame_number}.jpg (or .tif)
+            R{roll_number}F{frame_info}.jpg (or .tif)
 
         images_dir is a path object that represents the directory of images to
         operate on
@@ -158,11 +158,9 @@ class FrontierCleaner:
             # add the dir that the image was found in to the export_dirs set
             export_dirs.add(image_path.parent)
 
-            frame_info = img_match.group("frame_number") + \
-                (img_match.group("dup_suffix") or "")
+            frame_info = img_match.group("frame_info")
 
-            new_filename = f"R{formatted_roll_number}" \
-                f"F{frame_info}"
+            new_filename = f"R{formatted_roll_number}F{frame_info}"
 
             new_filepath = dest_dir / f"{new_filename}{suffix}"
             print(f"{image_path.name} => {new_filename}{suffix}")
