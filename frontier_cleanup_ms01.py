@@ -1,11 +1,10 @@
-from pathlib import Path
-from datetime import datetime
-
 import argparse
-import exiftool
 import itertools
 import re
+from datetime import datetime
+from pathlib import Path
 
+import exiftool
 
 # assume folder structure:
 # YourName_007466/  <- order id + roll number
@@ -114,6 +113,8 @@ class FrontierCleaner:
 
         # the roll number can be extracted from the directory name
         dir_match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
+        if not dir_match:
+            raise ValueError(f"image dir doesn't match expected format: {images_dir}")
         roll_number = dir_match.group("roll_number")
         # convert roll number to an int, and then zero pad it as desired
         formatted_roll_number = \
