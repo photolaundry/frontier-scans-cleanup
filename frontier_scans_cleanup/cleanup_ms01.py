@@ -5,17 +5,22 @@ from datetime import datetime
 from pathlib import Path
 
 import exiftool
-from wand.image import Image
 
 # assume folder structure:
-# YourName007466/  <- order id + roll number
-#   000001.jpg  <- frame number
-#   000002.jpg  <- frame number
-#   000003.jpg  <- frame number
-#   ...
-# YourName007467/
-#   ...
-# OtherName007468/
+# YourName_007466/  <- order id + roll number
+#   Export JPG NoResize/ <- Tells which file format
+#     R1-00046-0000A.JPG  <- R1-{MS01 internal roll number, ignore}-{frame_num}
+#                         <- Often this is the first frame, named 00 or 00A
+#     R1-00046-0000A_0001.JPG  <- same as above, but actually 2nd frame 0A
+#     R1-00046-0001A.JPG  <- etc
+#     R1-00046-0002A.JPG  <- etc
+#     R1-00046-0003A.JPG  <- etc
+#     ...
+# YourName_007467/
+#   Export TIFF NoResize/ <- Tells which file format
+#     R1-00047-0001.TIF
+#     ...
+# OtherName_007468/
 #   ...
 
 
@@ -23,18 +28,17 @@ class FrontierCleaner:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = \
-        r"(?P<order_id>.{1,10})" \
+        r"(?P<order_id>.{1,10})_" \
         r"(?P<roll_number>\d{6})"
-    IMAGE_DIR_GLOB_PATTERN = "*" + "[0-9]" * 6
+    IMAGE_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = \
-        r"(?P<frame_number>\d{6})"
+        r"R1-\d{5}-(?P<frame_info>\d{1,4}A?(_\d{4})?)"
 
     def __init__(self,
                  exiftool_client,
                  frontier_export_path=None,
                  reorg=False,
-                 roll_padding=4,
-                 frame_padding=2):
+                 roll_padding=4):
         """
         exiftool_client is a exiftool.ExifToolHelper object that will be used
         to perform all EXIF modifications required.
@@ -45,8 +49,6 @@ class FrontierCleaner:
         order id and date. Defaults to False.
         roll_padding is how many characters of zero padding to use for the
         roll number.
-        frame_padding is how many characters of zero padding to use for the
-        frame number.
         """
         self.exiftool = exiftool_client
 
@@ -57,13 +59,11 @@ class FrontierCleaner:
 
         self.reorg = reorg
         self.roll_padding = roll_padding
-        self.frame_padding = frame_padding
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
 
     def clean(self):
         for image_dir in self.find_all_image_dirs():
             try:
-                self.convert_bmps_to_tifs(image_dir)
                 self.fix_timestamps(image_dir)
                 self.rename_images(image_dir)
             except ValueError as e:
@@ -72,9 +72,9 @@ class FrontierCleaner:
 
     def find_all_image_dirs(self):
         """
-        The Frontier exports images into a dir for each roll, where the
-        directory name is the order id (up to 10 of any character) followed by
-        the 6-digit roll number.
+        The Frontier MS01 system exports images into a dir for each roll, where
+        the directory name is the order id (up to 10 of any character) followed
+        by a _ and the 6-digit roll number.
         """
         found_dirs = []
         if not self.frontier_export_path.is_dir():
@@ -88,47 +88,25 @@ class FrontierCleaner:
 
         return found_dirs
 
-    def convert_bmps_to_tifs(self, images_dir):
-        """
-        Converts all BMP files to compressed TIF files (with lzw compression).
-        images_dir is a path object that represents the directory of images to
-        operate on
-        """
-        print("converting bmps to tifs...")
-        for image_path in sorted(images_dir.glob("*")):
-            _ = image_path.stem  # the filename without extension
-            suffix = image_path.suffix  # the extension including the .
-
-            if str(suffix).lower() != ".bmp" or not image_path.is_file():
-                continue
-
-            print(f"converting {image_path}")
-            bmp_image = Image(filename=image_path)
-            with bmp_image.convert("tif") as tif_image:
-                tif_image.compression = "lzw"
-                tif_filepath = image_path.with_suffix(".tif")
-                tif_image.save(filename=tif_filepath)
-
-            # delete original bmps
-            image_path.unlink()
-
     def rename_images(self, images_dir):
         """
         Renames the images in the images_dir directory in the format:
-            R{roll_number}F{frame_number}.jpg (or .tif)
+            R{roll_number}F{frame_info}.jpg (or .tif)
 
-        Since the C4/C5 software doesn't seem to save the frame names as read
-        by the DX code reader, its filenames are always frame numbers. We can
-        rename these filenames to be sequential since the Frontier sometimes
-        numbers these wrong, skipping frames 02-06 often.
         images_dir is a path object that represents the directory of images to
         operate on
         """
+
+        # we need to search recursively because MS01 produces a dir for each
+        # digital export type, such as "Export JPG NoResize", and stores the
+        # images in there
         images_glob = sorted(itertools.chain(
-            images_dir.glob("*.jpg"),
-            images_dir.glob("*.bmp"),
-            images_dir.glob("*.JPG"),
-            images_dir.glob("*.BMP")))
+            images_dir.glob("**/*.jpg"),
+            images_dir.glob("**/*.tif"),
+            images_dir.glob("**/*.bmp"),
+            images_dir.glob("**/*.JPG"),
+            images_dir.glob("**/*.TIF"),
+            images_dir.glob("**/*.BMP")))
         if not images_glob:
             print(f"No images found, skipping: {images_dir}")
             return
@@ -161,7 +139,11 @@ class FrontierCleaner:
 
         print(f"saving to: {dest_dir}")
 
-        for image_number, image_path in enumerate(images_glob):
+        # set of all the "Export JPG NoResize" or "Export TIF NoResize" dirs
+        # (which all images are originally stored in)
+        export_dirs = set()
+
+        for image_path in images_glob:
             filename = image_path.stem  # the filename without extension
             suffix = image_path.suffix  # the extension including the .
 
@@ -174,9 +156,12 @@ class FrontierCleaner:
                     f"image filename doesn't match expected format: "
                     f"{image_path}")
 
-            frame_number = image_number + 1  # since image_number is 0-indexed
-            new_filename = f"R{formatted_roll_number}" \
-                f"F{int(frame_number):0>{self.frame_padding}d}"
+            # add the dir that the image was found in to the export_dirs set
+            export_dirs.add(image_path.parent)
+
+            frame_info = img_match.group("frame_info")
+
+            new_filename = f"R{formatted_roll_number}F{frame_info}"
 
             new_filepath = dest_dir / f"{new_filename}{suffix}"
             print(f"{image_path.name} => {new_filename}{suffix}")
@@ -186,6 +171,10 @@ class FrontierCleaner:
         if self.reorg:
             # delete the images_dir now that all images are renamed and moved
             try:
+                # delete all the the "Export JPG NoResize" dirs
+                for export_dir in export_dirs:
+                    export_dir.rmdir()
+                # delete the images_dir (the order dir)
                 images_dir.rmdir()
             except OSError:
                 print(f"Directory not empty, skipping deletion: {images_dir}")
@@ -281,7 +270,7 @@ class FrontierCleaner:
                     print(f"exiftool: {result}")
 
 
-if __name__ == "__main__":
+def cli():
     parser = argparse.ArgumentParser(
         description="Sanitizes Frontier scan files by renaming images and "
         "optionally reorganizes them into order id directories."
@@ -305,12 +294,6 @@ if __name__ == "__main__":
         "default: 4"
     )
 
-    parser.add_argument(
-        "--frame_padding", type=int, default=2,
-        help="how many characters of zero padding to add for the frame "
-        "number. default: 2"
-    )
-
     args = parser.parse_args()
 
     # the -G and -n are the default common args, -overwrite_original makes sure
@@ -321,6 +304,8 @@ if __name__ == "__main__":
             exiftool_client=et,
             frontier_export_path=args.frontier_export_path,
             reorg=args.reorg,
-            roll_padding=args.roll_padding,
-            frame_padding=args.frame_padding)
+            roll_padding=args.roll_padding)
         cleaner.clean()
+
+if __name__ == "__main__":
+    cli()
