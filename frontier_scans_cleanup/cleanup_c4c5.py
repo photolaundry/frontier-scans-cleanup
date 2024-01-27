@@ -22,19 +22,18 @@ from wand.image import Image
 class FrontierCleaner:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
-    IMAGE_DIR_PATTERN = \
-        r"(?P<order_id>.{1,10})" \
-        r"(?P<roll_number>\d{6})"
+    IMAGE_DIR_PATTERN = r"(?P<order_id>.{1,10})(?P<roll_number>\d{6})"
     IMAGE_DIR_GLOB_PATTERN = "*" + "[0-9]" * 6
-    IMAGE_NAME_PATTERN = \
-        r"(?P<frame_number>\d{6})"
+    IMAGE_NAME_PATTERN = r"(?P<frame_number>\d{6})"
 
-    def __init__(self,
-                 exiftool_client,
-                 frontier_export_path=None,
-                 reorg=False,
-                 roll_padding=4,
-                 frame_padding=2):
+    def __init__(
+        self,
+        exiftool_client,
+        frontier_export_path=None,
+        reorg=False,
+        roll_padding=4,
+        frame_padding=2,
+    ):
         """
         exiftool_client is a exiftool.ExifToolHelper object that will be used
         to perform all EXIF modifications required.
@@ -81,9 +80,10 @@ class FrontierCleaner:
             raise ValueError("given path is not a directory")
 
         found_dirs += sorted(
-            filter(lambda x: x.is_dir(),
-                   self.frontier_export_path.glob(self.IMAGE_DIR_GLOB_PATTERN)
-                   )
+            filter(
+                lambda x: x.is_dir(),
+                self.frontier_export_path.glob(self.IMAGE_DIR_GLOB_PATTERN),
+            )
         )
 
         return found_dirs
@@ -124,11 +124,14 @@ class FrontierCleaner:
         images_dir is a path object that represents the directory of images to
         operate on
         """
-        images_glob = sorted(itertools.chain(
-            images_dir.glob("*.jpg"),
-            images_dir.glob("*.bmp"),
-            images_dir.glob("*.JPG"),
-            images_dir.glob("*.BMP")))
+        images_glob = sorted(
+            itertools.chain(
+                images_dir.glob("*.jpg"),
+                images_dir.glob("*.bmp"),
+                images_dir.glob("*.JPG"),
+                images_dir.glob("*.BMP"),
+            )
+        )
         if not images_glob:
             print(f"No images found, skipping: {images_dir}")
             return
@@ -136,11 +139,12 @@ class FrontierCleaner:
         # the roll number can be extracted from the directory name
         dir_match = re.match(self.IMAGE_DIR_PATTERN, images_dir.name)
         if not dir_match:
-            raise ValueError(f"image dir doesn't match expected format: {images_dir}")
+            raise ValueError(
+                f"image dir doesn't match expected format: {images_dir}"
+            )
         roll_number = dir_match.group("roll_number")
         # convert roll number to an int, and then zero pad it as desired
-        formatted_roll_number = \
-            f"{int(roll_number):0>{self.roll_padding}d}"
+        formatted_roll_number = f"{int(roll_number):0>{self.roll_padding}d}"
 
         first_image_path = images_glob[0]
         if self.reorg:
@@ -149,12 +153,17 @@ class FrontierCleaner:
 
             # find the date from the mtime of the first image
             first_image_mtime = datetime.fromtimestamp(
-                first_image_path.stat().st_mtime)
+                first_image_path.stat().st_mtime
+            )
             date_dir_number = first_image_mtime.strftime("%Y%m%d")
 
             # destination dir to save the images to (same dir as Frontier)
-            dest_dir = self.frontier_export_path / \
-                order_id / date_dir_number / formatted_roll_number
+            dest_dir = (
+                self.frontier_export_path
+                / order_id
+                / date_dir_number
+                / formatted_roll_number
+            )
         else:
             # reuse the same directory as the original image
             dest_dir = first_image_path.parent
@@ -172,11 +181,14 @@ class FrontierCleaner:
             if not img_match:
                 raise ValueError(
                     f"image filename doesn't match expected format: "
-                    f"{image_path}")
+                    f"{image_path}"
+                )
 
             frame_number = image_number + 1  # since image_number is 0-indexed
-            new_filename = f"R{formatted_roll_number}" \
+            new_filename = (
+                f"R{formatted_roll_number}"
                 f"F{int(frame_number):0>{self.frame_padding}d}"
+            )
 
             new_filepath = dest_dir / f"{new_filename}{suffix}"
             print(f"{image_path.name} => {new_filename}{suffix}")
@@ -220,13 +232,16 @@ class FrontierCleaner:
         """
         first_image_mtime = None
         image_num = 0
-        images_glob = sorted(itertools.chain(
-            images_dir.glob("**/*.jpg"),
-            images_dir.glob("**/*.tif"),
-            images_dir.glob("**/*.bmp"),
-            images_dir.glob("**/*.JPG"),
-            images_dir.glob("**/*.TIF"),
-            images_dir.glob("**/*.BMP")))
+        images_glob = sorted(
+            itertools.chain(
+                images_dir.glob("**/*.jpg"),
+                images_dir.glob("**/*.tif"),
+                images_dir.glob("**/*.bmp"),
+                images_dir.glob("**/*.JPG"),
+                images_dir.glob("**/*.TIF"),
+                images_dir.glob("**/*.BMP"),
+            )
+        )
         for image_path in images_glob:
             filename = image_path.stem  # the filename without extension
 
@@ -237,21 +252,25 @@ class FrontierCleaner:
             if not img_match:
                 raise ValueError(
                     f"image filename doesn't match expected format: "
-                    f"{image_path}")
+                    f"{image_path}"
+                )
 
             # only bump counter for images that match
             image_num += 1
 
             if not first_image_mtime:
                 first_image_mtime = datetime.fromtimestamp(
-                    image_path.stat().st_mtime)
+                    image_path.stat().st_mtime
+                )
 
             # image ordering is preserved in the capture time saved,
             # see above docstring
             datetime_original = first_image_mtime.strftime(
-                self.EXIF_DATETIME_STR_FORMAT)
+                self.EXIF_DATETIME_STR_FORMAT
+            )
             datetime_digitized = first_image_mtime.strftime(
-                self.EXIF_DATETIME_STR_FORMAT)
+                self.EXIF_DATETIME_STR_FORMAT
+            )
             # There's 3 decimal places for the milliseconds, so zero-pad to 3
             subsec_time_original = f"{image_num - 1:0>3d}"
             subsec_time_digitized = f"{image_num - 1:0>3d}"
@@ -263,21 +282,27 @@ class FrontierCleaner:
                 "EXIF:SubSecTimeDigitized": subsec_time_digitized,
             }
 
-            print(f"{image_path.name} getting datetime: "
-                  f"{datetime_original}:"
-                  f"{subsec_time_original}")
+            print(
+                f"{image_path.name} getting datetime: "
+                f"{datetime_original}:"
+                f"{subsec_time_original}"
+            )
 
             try:
                 result = self.exiftool.set_tags(str(image_path), tags_to_write)
             except exiftool.exceptions.ExifToolExecuteError as err:
-                print(f"exiftool error while updating timestamps on image: "
-                      f"{image_path}")
+                print(
+                    f"exiftool error while updating timestamps on image: "
+                    f"{image_path}"
+                )
                 print(f"error: {err.stdout}")
             else:
                 result = result.strip()
                 if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
-                    print(f"failed to update timestamps on image: "
-                          f"{image_path}")
+                    print(
+                        f"failed to update timestamps on image: "
+                        f"{image_path}"
+                    )
                     print(f"exiftool: {result}")
 
 
@@ -287,28 +312,36 @@ def cli():
         "optionally reorganizes them into order id directories."
     )
     parser.add_argument(
-        "frontier_export_path", nargs="?", default=None,
+        "frontier_export_path",
+        nargs="?",
+        default=None,
         help="The path to the directory that Frontier exporting software "
         "directly exports to. If not provided, will assume the current "
-        "working directory."
+        "working directory.",
     )
 
     parser.add_argument(
-        "--reorg", action="store_true", default=False,
+        "--reorg",
+        action="store_true",
+        default=False,
         help="whether to reorganize the scans into order and date directories "
-        "or not. default: False"
+        "or not. default: False",
     )
 
     parser.add_argument(
-        "--roll_padding", type=int, default=4,
+        "--roll_padding",
+        type=int,
+        default=4,
         help="how many characters of zero padding to add for the roll number. "
-        "default: 4"
+        "default: 4",
     )
 
     parser.add_argument(
-        "--frame_padding", type=int, default=2,
+        "--frame_padding",
+        type=int,
+        default=2,
         help="how many characters of zero padding to add for the frame "
-        "number. default: 2"
+        "number. default: 2",
     )
 
     args = parser.parse_args()
@@ -322,8 +355,10 @@ def cli():
             frontier_export_path=args.frontier_export_path,
             reorg=args.reorg,
             roll_padding=args.roll_padding,
-            frame_padding=args.frame_padding)
+            frame_padding=args.frame_padding,
+        )
         cleaner.clean()
+
 
 if __name__ == "__main__":
     cli()
