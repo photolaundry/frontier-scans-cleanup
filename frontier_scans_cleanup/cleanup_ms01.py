@@ -24,7 +24,7 @@ import exiftool
 #   ...
 
 
-class FrontierCleaner:
+class FrontierCleanerMS01:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     IMAGE_DIR_PATTERN = r"(?P<order_id>.{1,10})_(?P<roll_number>\d{6})"
@@ -329,7 +329,7 @@ def cli():
     # to not leave behind the "original" files
     common_args = ["-G", "-n", "-overwrite_original"]
     with exiftool.ExifToolHelper(common_args=common_args) as et:
-        cleaner = FrontierCleaner(
+        cleaner = FrontierCleanerMS01(
             exiftool_client=et,
             frontier_export_path=args.frontier_export_path,
             reorg=args.reorg,
