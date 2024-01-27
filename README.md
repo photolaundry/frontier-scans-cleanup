@@ -13,11 +13,16 @@ Lastly the exporting software doesn't seem to set the correct DateTime EXIF tags
  4. (C4/C5 only) Reindexes the frame numbers for each roll starting at 1, fixing the wrong frame numbers from a bad DX reader.
  5. Optionally reorganizes scan folders into: `<order_id>/<date>/<order_number>/<frame_number>.jpg` format.
 
-## Requirements
-The script was written and tested in Python 3.9, but likely works for Python 3.6 and newer. Use `pip install -r requirements/default.txt` to install the required python packages. In addition, ImageMagick and exiftool must both be installed. If you need help installing ImageMagick, go *[here](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)*. For help installing exiftool, go *[here](https://exiftool.org/install.html)* (for MacOS users, you can also use *[homebrew](https://formulae.brew.sh/formula/exiftool)* to install it).
+## Installation
+TODO: update this when the wheel is easier to find/download.
+The scripts are written and tested in Python 3.9, but likely works for Python 3.6 and newer. To install, use either `pip` or `pipx` to install the `frontier-scans-cleanup` package.
+
+*[ImageMagick](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)* and *[ExifTool](https://exiftool.org/install.html)* must both be installed for the script to work. For MacOS users, you can alternatively use Homebrew to install both of these packages. See *[here](https://formulae.brew.sh/formula/imagemagick)* and *[here](https://formulae.brew.sh/formula/exiftool)*.
 
 ## Run
 ### C4/C5 exporting software
-Run `python frontier_cleanup_c4c5.py` in the directory you've directly exported all your Frontier scans to (e.g. the directory you exported to the Writing tab in the C4/C5 software). Alternatively, you can specify the location as an argument: `python frontier_cleanup_c4c5.py path/to/frontier_scans/`.
+Run `frontier-clean-c4c5` in the directory you've directly exported all your Frontier scans to (e.g. the directory you exported to the Writing tab in the C4/C5 software). Alternatively, you can specify the location as an argument: `frontier-clean-c4c5 /path/to/frontier_scans/`.
 ### MS01 exporting software
-Run `python frontier_cleanup_ms01.py` in the directory you've directly exported all your Frontier scans to (e.g. the directory you specified in the export digital product in MS01 server software). Alternatively, you can specify the location as an argument: `python frontier_cleanup_ms01.py path/to/frontier_scans/`.
+Run `frontier-clean-ms01` in the directory you've directly exported all your Frontier scans to (e.g. the directory you specified in the export digital product in MS01 server software). Alternatively, you can specify the location as an argument: `frontier-clean-ms01 /path/to/frontier_scans/`.
+### Optional flags
+If you want to reorganize your order folders by date and order ID (e.g. customer name), add the `--reorg` argument: `frontier-clean-ms01 --reorg /path/to/frontier_scans/`
