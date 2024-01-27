@@ -33,5 +33,5 @@ test = ["pytest (>=7.2.0)"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.9"
-content-hash = "20142a8d3e440ecf491e5162fbf74b8d8725b79d530819ec68eab5680ee08833"
+python-versions = "^3.7"
+content-hash = "298bb16171f9458b3b8a0d85b9d7038de54a398bf4a4d7109cb7e17cae1f9c8f"

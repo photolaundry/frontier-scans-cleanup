@@ -6,7 +6,7 @@ authors = ["Bobo Li <bobo@photolaundrysf.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.7"
 Wand = "^0.6.11"
 PyExifTool = "^0.5.6"
 
