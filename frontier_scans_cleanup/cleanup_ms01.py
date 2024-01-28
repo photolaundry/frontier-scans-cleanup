@@ -175,7 +175,7 @@ class FrontierCleanerMS01:
             # reuse the same directory as the original image
             dest_dir = first_image_path.parent
 
-        print(f"  --reorg used. Will move scans to: {dest_dir}")
+        print(f"  --reorg used, will move scans to: {dest_dir}")
 
         # set of all the "Export JPG NoResize" or "Export TIF NoResize" dirs
         # (which all images are originally stored in)
