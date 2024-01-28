@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "frontier-scans-cleanup"
-version = "0.1.2"
+version = "0.2.0"
 description = "A script to fix metadata and reorganize film scans from Fujifilm Frontier scanners."
 authors = ["Bobo Li <bobo@photolaundrysf.com>"]
 readme = "README.md"

@@ -30,6 +30,7 @@ class FrontierCleanerMS01:
     ROLL_DIR_PATTERN = r"(?P<order_id>.{1,10})_(?P<roll_number>\d{6})"
     ROLL_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>\d{1,4}A?(_\d{4})?)"
+    DEFAULT_SCANNER_MODEL = "SP-3000"
 
     def __init__(
         self,
@@ -37,6 +38,7 @@ class FrontierCleanerMS01:
         frontier_export_path=None,
         reorg=False,
         roll_padding=4,
+        scanner_model=None
     ):
         """
         exiftool_client is a exiftool.ExifToolHelper object that will be used
@@ -48,6 +50,8 @@ class FrontierCleanerMS01:
         order id and date. Defaults to False.
         roll_padding is how many characters of zero padding to use for the
         roll number.
+        scanner_model is the name of the scanner you used (this will be
+        written to the EXIF data).
         """
         self.exiftool = exiftool_client
 
@@ -59,6 +63,7 @@ class FrontierCleanerMS01:
         self.reorg = reorg
         self.roll_padding = roll_padding
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
+        self.scanner_model = scanner_model or self.DEFAULT_SCANNER_MODEL
 
     def clean(self):
         for roll_dir in self.find_all_rolls():
@@ -215,6 +220,8 @@ class FrontierCleanerMS01:
                 "EXIF:DateTimeDigitized": datetime_digitized,
                 "EXIF:SubSecTimeOriginal": subsec_time_original,
                 "EXIF:SubSecTimeDigitized": subsec_time_digitized,
+                "EXIF:Make": "FUJI PHOTO FILM CO., LTD.",
+                "EXIF:Model": "SP-3000"
             }
 
             print(
@@ -296,6 +303,12 @@ def cli():
         default=4,
         help="how many characters of zero padding to add for the roll number. "
         "default: 4",
+    )
+
+    parser.add_argument(
+        "--scanner_model",
+        default="SP-3000",
+        help="the scanner model (used to write EXIF data). default: SP-3000",
     )
 
     args = parser.parse_args()
