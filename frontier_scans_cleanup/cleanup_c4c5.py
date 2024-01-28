@@ -88,6 +88,48 @@ class FrontierCleanerC4C5:
         return found_dirs
 
     def fix_all_in_dir(self, roll_dir):
+        """
+        This method does the following to sanitize images:
+        1. Converts BMPs to TIFFs.
+        2. Add EXIF tags for capture time to all images.
+        3. Renames all images to simplify.
+        4. Optionally reorganizes the images into a new directory structure.
+
+        We first convert all BMP files to compressed TIF files using zip
+        compression.
+
+        We then add the DateTimeOriginal EXIF tag to all images, based on the
+        filesystem modified timestamp of the file. This fixes the issue where
+        rotating a file in Finder or Adobe Bridge will adjust the image's
+        modified timestamp, messing up programs that sort by Capture Time
+        (such as Lightroom).
+
+        We set the capture times of the files as such:
+            1st image gets the same capture time as its file modified time.
+            2nd image gets the 1st image's capture time, but +1 millisecond.
+            3rd image gets the 1st image's capture time, but +2 milliseconds.
+
+        We can't just save each image's modified time as its capture time
+        because the software doesn't guarantee that it saves the images in
+        sequential order, sometimes a later frame gets saved before an earlier
+        one.
+
+        The adding of milliseconds helps preserve the sorting order in programs
+        like Lightroom since the ordering is also enforced by the capture time
+        set.  If all files got the same capture time, and we were saving the
+        frame name in the filenames, we would get cases where ###, 00, 0, E, XA
+        frames get out of order, because LR would have to use filename to sort
+        since they'd all have the same capture time.
+
+        Then we rename images into a cleaner format with just the roll number
+        and the frame number/name:
+            R<roll_number>F<frame_info>.jpg (or .tif)
+
+        Finally, we optionally move all images to this directory structure:
+            <order/customer id>/<date>/<roll number>/
+
+        roll_dir is a path object that represents the directory of images to
+        """
         print(f"working on dir: {roll_dir}")
         images_glob = sorted(
             itertools.chain(
@@ -153,7 +195,7 @@ class FrontierCleanerC4C5:
                 print(f"  converting {image_path} to TIFF")
                 bmp_image = Image(filename=image_path)
                 with bmp_image.convert("tif") as tif_image:
-                    tif_image.compression = "lzw"
+                    tif_image.compression = "zip"
                     tif_filepath = image_path.with_suffix(".tif")
                     tif_image.save(filename=tif_filepath)
 
