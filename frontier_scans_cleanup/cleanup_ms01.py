@@ -63,11 +63,10 @@ class FrontierCleanerMS01:
     def clean(self):
         for roll_dir in self.find_all_rolls():
             try:
-                self.fix_timestamps(roll_dir)
-                self.rename_images(roll_dir)
+                self.fix_all_in_dir(roll_dir)
             except ValueError as e:
                 print(e)
-                print(f"skipping directory {roll_dir}...")
+                print(f"  skipping directory {roll_dir}...")
 
     def find_all_rolls(self):
         """
@@ -88,18 +87,47 @@ class FrontierCleanerMS01:
 
         return found_dirs
 
-    def rename_images(self, roll_dir):
+    def fix_all_in_dir(self, roll_dir):
         """
-        Renames the images in the roll_dir directory in the format:
-            R{roll_number}F{frame_info}.jpg (or .tif)
+        This method does the following to sanitize images:
+        1. Add EXIF tags for capture time to all images.
+        2. Renames all images to simplify.
+        3. Optionally reorganizes the images into a new directory structure.
 
+        We first add the DateTimeOriginal EXIF tag to all images, based on the
+        filesystem modified timestamp of the file. This fixes the issue where
+        rotating a file in Finder or Adobe Bridge will adjust the image's
+        modified timestamp, messing up programs that sort by Capture Time
+        (such as Lightroom).
+
+        We set the capture times of the files as such:
+            1st image gets the same capture time as its file modified time.
+            2nd image gets the 1st image's capture time, but +1 millisecond.
+            3rd image gets the 1st image's capture time, but +2 milliseconds.
+
+        We can't just save each image's modified time as its capture time
+        because the export software doesn't guarantee that it saves the images
+        in sequential order, sometimes a later frame gets saved before an
+        earlier one.
+
+        The adding of milliseconds helps preserve the sorting order in programs
+        like Lightroom since the ordering is also enforced by the capture time
+        set.  If all files got the same capture time, and we were saving the
+        frame name in the filenames, we would get cases where ###, 00, 0, E, XA
+        frames get out of order, because LR would have to use filename to sort
+        since they'd all have the same capture time.
+
+        Then we rename images into a cleaner format with just the roll number
+        and the frame number/name:
+            R<roll_number>F<frame_info>.jpg (or .tif)
+
+        Finally, we optionally move all images to this directory structure:
+            <order/customer id>/<date>/<roll number>/
+        
         roll_dir is a path object that represents the directory of images to
-        operate on
+        operate on.
         """
-
-        # we need to search recursively because MS01 produces a dir for each
-        # digital export type, such as "Export JPG NoResize", and stores the
-        # images in there
+        print(f"working on dir: {roll_dir}")
         images_glob = sorted(
             itertools.chain(
                 roll_dir.glob("**/*.jpg"),
@@ -110,9 +138,15 @@ class FrontierCleanerMS01:
                 roll_dir.glob("**/*.BMP"),
             )
         )
+
         if not images_glob:
-            print(f"No images found, skipping: {roll_dir}")
+            print(f"  No images found, skipping: {roll_dir}")
             return
+            
+        first_image_path = images_glob[0]
+        first_image_mtime = datetime.fromtimestamp(
+            first_image_path.stat().st_mtime
+        )
 
         # the roll number can be extracted from the directory name
         dir_match = re.match(self.ROLL_DIR_PATTERN, roll_dir.name)
@@ -124,15 +158,10 @@ class FrontierCleanerMS01:
         # convert roll number to an int, and then zero pad it as desired
         formatted_roll_number = f"{int(roll_number):0>{self.roll_padding}d}"
 
-        first_image_path = images_glob[0]
         if self.reorg:
             # the order id can be extracted from the directory name
             order_id = dir_match.group("order_id")
 
-            # find the date from the mtime of the first image
-            first_image_mtime = datetime.fromtimestamp(
-                first_image_path.stat().st_mtime
-            )
             date_dir_number = first_image_mtime.strftime("%Y%m%d")
 
             # destination dir to save the images to (same dir as Frontier)
@@ -146,13 +175,13 @@ class FrontierCleanerMS01:
             # reuse the same directory as the original image
             dest_dir = first_image_path.parent
 
-        print(f"saving to: {dest_dir}")
+        print(f"  --reorg used. Will move scans to: {dest_dir}")
 
         # set of all the "Export JPG NoResize" or "Export TIF NoResize" dirs
         # (which all images are originally stored in)
         export_dirs = set()
 
-        for image_path in images_glob:
+        for image_num, image_path in enumerate(images_glob):
             filename = image_path.stem  # the filename without extension
             suffix = image_path.suffix  # the extension including the .
 
@@ -169,15 +198,41 @@ class FrontierCleanerMS01:
             # add the dir that the image was found in to the export_dirs set
             export_dirs.add(image_path.parent)
 
+            # image ordering is preserved in the capture time saved,
+            # see above docstring
+            datetime_original = first_image_mtime.strftime(
+                self.EXIF_DATETIME_STR_FORMAT
+            )
+            datetime_digitized = first_image_mtime.strftime(
+                self.EXIF_DATETIME_STR_FORMAT
+            )
+            # There's 3 decimal places for the milliseconds, so zero-pad to 3
+            subsec_time_original = f"{image_num:0>3d}"
+            subsec_time_digitized = f"{image_num:0>3d}"
+
+            tags_to_write = {
+                "EXIF:DateTimeOriginal": datetime_original,
+                "EXIF:DateTimeDigitized": datetime_digitized,
+                "EXIF:SubSecTimeOriginal": subsec_time_original,
+                "EXIF:SubSecTimeDigitized": subsec_time_digitized,
+            }
+
+            print(
+                f"  {image_path.name} getting datetime: "
+                f"{datetime_original}:{subsec_time_original}"
+            )
+
+            self.write_exif_tags(image_path, tags_to_write)
+
             frame_info = img_match.group("frame_info")
 
             new_filename = f"R{formatted_roll_number}F{frame_info}"
 
             new_filepath = dest_dir / f"{new_filename}{suffix}"
-            print(f"{image_path.name} => {new_filename}{suffix}")
+            print(f"  Renaming {image_path.name} => {new_filename}{suffix}")
             dest_dir.mkdir(parents=True, exist_ok=True)
             image_path.rename(new_filepath)
-
+            
         if self.reorg:
             # delete the old roll_dir now that all images are renamed and
             # moved
@@ -188,110 +243,29 @@ class FrontierCleanerMS01:
                 # delete the roll_dir
                 roll_dir.rmdir()
             except OSError:
-                print(f"Directory not empty, skipping deletion: {roll_dir}")
-
-    def fix_timestamps(self, roll_dir):
-        """
-        Adds the DateTimeOriginal EXIF tag to all images, based on the
-        filesystem modified timestamp of the file. This fixes the issue where
-        rotating a file in Finder or Adobe Bridge will adjust the image's
-        modified timestamp, messing up programs that sort by Capture Time
-        (such as Lightroom).
-
-        We set the capture times of the files as such:
-            1st image gets the same capture time as its file modified time.
-            2nd image gets the 1st image's capture time, but +1 millisecond.
-            3rd image gets the 1st image's capture time, but +2 milliseconds.
-
-        We can't just save each image's modified time as its capture time
-        because the software doesn't guarantee that it saves the images in
-        sequential order, sometimes a later frame gets saved before an earlier
-        one.
-
-        The adding of milliseconds helps preserve the sorting order in programs
-        like Lightroom since the ordering is also enforced by the capture time
-        set.  If all files got the same capture time, and we were saving the
-        frame name in the filenames, we would get cases where ###, 00, 0, E, XA
-        frames get out of order, because LR would have to use filename to sort
-        since they'd all have the same capture time.
-
-        roll_dir is a path object that represents the directory of images to
-        operate on.
-        """
-        first_image_mtime = None
-        image_num = 0
-        images_glob = sorted(
-            itertools.chain(
-                roll_dir.glob("**/*.jpg"),
-                roll_dir.glob("**/*.tif"),
-                roll_dir.glob("**/*.bmp"),
-                roll_dir.glob("**/*.JPG"),
-                roll_dir.glob("**/*.TIF"),
-                roll_dir.glob("**/*.BMP"),
-            )
-        )
-        for image_path in images_glob:
-            filename = image_path.stem  # the filename without extension
-
-            if str(filename).startswith(".") or not image_path.is_file():
-                continue
-
-            img_match = self.image_name_matcher.match(filename)
-            if not img_match:
-                raise ValueError(
-                    f"image filename doesn't match expected format: "
-                    f"{image_path}"
-                )
-
-            # only bump counter for images that match
-            image_num += 1
-
-            if not first_image_mtime:
-                first_image_mtime = datetime.fromtimestamp(
-                    image_path.stat().st_mtime
-                )
-
-            # image ordering is preserved in the capture time saved,
-            # see above docstring
-            datetime_original = first_image_mtime.strftime(
-                self.EXIF_DATETIME_STR_FORMAT
-            )
-            datetime_digitized = first_image_mtime.strftime(
-                self.EXIF_DATETIME_STR_FORMAT
-            )
-            # There's 3 decimal places for the milliseconds, so zero-pad to 3
-            subsec_time_original = f"{image_num - 1:0>3d}"
-            subsec_time_digitized = f"{image_num - 1:0>3d}"
-
-            tags_to_write = {
-                "EXIF:DateTimeOriginal": datetime_original,
-                "EXIF:DateTimeDigitized": datetime_digitized,
-                "EXIF:SubSecTimeOriginal": subsec_time_original,
-                "EXIF:SubSecTimeDigitized": subsec_time_digitized,
-            }
-
+                print(f"  Directory not empty, skipping deletion: {roll_dir}")
+        
+    def write_exif_tags(self, image_path, tags_to_write):
+        try:
+            result = self.exiftool.set_tags(str(image_path), tags_to_write)
+        except exiftool.exceptions.ExifToolExecuteError as err:
             print(
-                f"{image_path.name} getting datetime: "
-                f"{datetime_original}:"
-                f"{subsec_time_original}"
+                f"  exiftool error while updating timestamps on image: "
+                f"  {image_path}"
             )
-
-            try:
-                result = self.exiftool.set_tags(str(image_path), tags_to_write)
-            except exiftool.exceptions.ExifToolExecuteError as err:
+            print(f"error: {err.stdout}")
+            return False
+        else:
+            result = result.strip()
+            if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
                 print(
-                    f"exiftool error while updating timestamps on image: "
-                    f"{image_path}"
+                    f"  failed to update timestamps on image: "
+                    f"  {image_path}"
                 )
-                print(f"error: {err.stdout}")
-            else:
-                result = result.strip()
-                if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
-                    print(
-                        f"failed to update timestamps on image: "
-                        f"{image_path}"
-                    )
-                    print(f"exiftool: {result}")
+                print(f"  exiftool: {result}")
+                return False
+            return True
+
 
 
 def cli():
