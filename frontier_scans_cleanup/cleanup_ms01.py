@@ -38,7 +38,7 @@ class FrontierCleanerMS01:
         frontier_export_path=None,
         reorg=False,
         roll_padding=4,
-        scanner_model=None
+        scanner_model=None,
     ):
         """
         exiftool_client is a exiftool.ExifToolHelper object that will be used
@@ -128,7 +128,7 @@ class FrontierCleanerMS01:
 
         Finally, we optionally move all images to this directory structure:
             <order/customer id>/<date>/<roll number>/
-        
+
         roll_dir is a path object that represents the directory of images to
         operate on.
         """
@@ -147,7 +147,7 @@ class FrontierCleanerMS01:
         if not images_glob:
             print(f"  No images found, skipping: {roll_dir}")
             return
-            
+
         first_image_path = images_glob[0]
         first_image_mtime = datetime.fromtimestamp(
             first_image_path.stat().st_mtime
@@ -221,7 +221,7 @@ class FrontierCleanerMS01:
                 "EXIF:SubSecTimeOriginal": subsec_time_original,
                 "EXIF:SubSecTimeDigitized": subsec_time_digitized,
                 "EXIF:Make": "FUJI PHOTO FILM CO., LTD.",
-                "EXIF:Model": "SP-3000"
+                "EXIF:Model": self.scanner_model,
             }
 
             print(
@@ -239,7 +239,7 @@ class FrontierCleanerMS01:
             print(f"  Renaming {image_path.name} => {new_filename}{suffix}")
             dest_dir.mkdir(parents=True, exist_ok=True)
             image_path.rename(new_filepath)
-            
+
         if self.reorg:
             # delete the old roll_dir now that all images are renamed and
             # moved
@@ -251,7 +251,7 @@ class FrontierCleanerMS01:
                 roll_dir.rmdir()
             except OSError:
                 print(f"  Directory not empty, skipping deletion: {roll_dir}")
-        
+
     def write_exif_tags(self, image_path, tags_to_write):
         try:
             result = self.exiftool.set_tags(str(image_path), tags_to_write)
@@ -272,7 +272,6 @@ class FrontierCleanerMS01:
                 print(f"  exiftool: {result}")
                 return False
             return True
-
 
 
 def cli():

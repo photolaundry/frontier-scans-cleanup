@@ -22,7 +22,7 @@ from wand.image import Image
 class FrontierCleanerC4C5:
     EXIF_DATETIME_STR_FORMAT = "%Y:%m:%d %H:%M:%S"
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
-    
+
     ROLL_DIR_PATTERN = r"(?P<order_id>.{1,10})(?P<roll_number>\d{6})"
     ROLL_DIR_GLOB_PATTERN = "*" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = r"(?P<frame_number>\d{6})"
@@ -248,7 +248,6 @@ class FrontierCleanerC4C5:
             except OSError:
                 print(f"  Directory not empty, skipping deletion: {roll_dir}")
 
-
     def write_exif_tags(self, image_path, tags_to_write):
         try:
             result = self.exiftool.set_tags(str(image_path), tags_to_write)
@@ -262,11 +261,9 @@ class FrontierCleanerC4C5:
             result = result.strip()
             if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
                 print(
-                    f"  failed to update timestamps on image: "
-                    f"{image_path}"
+                    f"  failed to update timestamps on image: {image_path}"
                 )
                 print(f"  exiftool: {result}")
-
 
 
 def cli():

@@ -9,15 +9,16 @@ Lastly the exporting software doesn't seem to set the correct DateTime EXIF tags
 ## What this script does
  1. (C4/C5 only) Converts any BMPs into lossless compressed TIFF.
  2. Adds timestamp EXIF data to all images.
- 3. Renames the images from `Customer001234/000001.jpg` (C4/C5) or `Customer_001234/R1-00131-0001.JPG` (MS01) to `R1234F01.jpg`, a simplification into this format: `R{roll_number}F{frame_number}.jpg`.
- 4. (C4/C5 only) Reindexes the frame numbers for each roll starting at 1, fixing the wrong frame numbers from a bad DX reader.
- 5. Optionally reorganizes scan folders into: `<order_id>/<date>/<order_number>/<frame_number>.jpg` format.
+ 3. (MS01 only) Adds the "Fujifilm SP-3000" (or any other model using the `--scanner_model` flag)metadata to all images.
+ 4. Renames the images from `Customer001234/000001.jpg` (C4/C5) or `Customer_001234/R1-00131-0001.JPG` (MS01) to `R1234F01.jpg`, a simplification into this format: `R<roll_number>F<frame_number>.jpg`.
+ 5. (C4/C5 only) Reindexes the frame numbers for each roll starting at 1, potentially fixing wrong frame numbers from a flaky film rebate sensor.
+ 6. Optionally reorganizes scan folders into: `<order_id>/<date>/<order_number>/R<roll_number>F<frame_number>.jpg` format.
 
 ## Installation
 TODO: update this when the wheel is easier to find/download.
 The scripts are written and tested in Python 3.9, but likely works for Python 3.6 and newer. To install, use either `pip` or `pipx` to install the `frontier-scans-cleanup` package.
 
-*[ImageMagick](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)* and *[ExifTool](https://exiftool.org/install.html)* must both be installed for the script to work. For MacOS users, you can alternatively use Homebrew to install both of these packages. See *[here](https://formulae.brew.sh/formula/imagemagick)* and *[here](https://formulae.brew.sh/formula/exiftool)*.
+*[ImageMagick](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)* and *[ExifTool](https://exiftool.org/install.html)* must both be installed for the script to work. For MacOS users, you can alternatively use Homebrew to install both of these packages: `brew install imagemagick exiftool`
 
 ## Run
 ### C4/C5 exporting software
