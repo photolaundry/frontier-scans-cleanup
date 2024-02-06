@@ -1,10 +1,14 @@
 import argparse
 import itertools
+import platform
 import re
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import exiftool
+import readchar
 from wand.image import Image
 
 # assume folder structure:
@@ -32,6 +36,7 @@ class FrontierCleanerC4C5:
         exiftool_client,
         frontier_export_path=None,
         reorg=False,
+        convert_bw=False,
         roll_padding=4,
         frame_padding=2,
     ):
@@ -43,10 +48,12 @@ class FrontierCleanerC4C5:
         to the current working directory.
         reorg is whether to reorganize all scans into directories based on
         order id and date. Defaults to False.
+        convert_bw is whether to interactively select directories to convert
+        to true black-and-white. Defaults to False.
         roll_padding is how many characters of zero padding to use for the
-        roll number.
+        roll number. Defaults to 4.
         frame_padding is how many characters of zero padding to use for the
-        frame number.
+        frame number. Defaults to 2.
         """
         self.exiftool = exiftool_client
 
@@ -56,6 +63,7 @@ class FrontierCleanerC4C5:
             self.frontier_export_path = Path(frontier_export_path)
 
         self.reorg = reorg
+        self.convert_bw = convert_bw
         self.roll_padding = roll_padding
         self.frame_padding = frame_padding
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
@@ -90,12 +98,16 @@ class FrontierCleanerC4C5:
     def fix_all_in_dir(self, roll_dir):
         """
         This method does the following to sanitize images:
-        1. Converts BMPs to TIFFs.
-        2. Add EXIF tags for capture time to all images.
-        3. Renames all images to simplify.
-        4. Optionally reorganizes the images into a new directory structure.
+        1. Optionally converts all images to B+W (asks for confirmation).
+        2. Converts all BMPs to TIFFs.
+        3. Add EXIF tags for capture time to all images.
+        4. Renames all images to simplify.
+        5. Optionally reorganizes the images into a new directory structure.
 
-        We first convert all BMP files to compressed TIF files using zip
+        We first optionally convert all images to B+W, prompting the user
+        for confirmation before doing so.
+
+        We then convert all BMP files to compressed TIF files using zip
         compression.
 
         We then add the DateTimeOriginal EXIF tag to all images, based on the
@@ -143,6 +155,32 @@ class FrontierCleanerC4C5:
             print(f"  No images found, skipping: {roll_dir}")
             return
 
+        first_image_path = images_glob[0]
+        # find the date from the mtime of the first image
+        first_image_mtime = datetime.fromtimestamp(
+            first_image_path.stat().st_mtime
+        )
+
+        need_to_convert_bw = False
+        if self.convert_bw:
+            while True:
+                print(
+                    f"  convert {roll_dir.name} to B+W? "
+                    "[y->yes, n->no/skip, o->view an image]: ",
+                    end="",
+                )
+                sys.stdout.flush()
+                selection = readchar.readchar().lower()
+                print()
+                match selection:
+                    case "y":
+                        need_to_convert_bw = True
+                        break
+                    case "n":
+                        break
+                    case "o":
+                        self.open_image(first_image_path)
+
         # the roll number can be extracted from the directory name
         dir_match = re.match(self.ROLL_DIR_PATTERN, roll_dir.name)
         if not dir_match:
@@ -153,11 +191,6 @@ class FrontierCleanerC4C5:
         # convert roll number to an int, and then zero pad it as desired
         formatted_roll_number = f"{int(roll_number):0>{self.roll_padding}d}"
 
-        first_image_path = images_glob[0]
-        # find the date from the mtime of the first image
-        first_image_mtime = datetime.fromtimestamp(
-            first_image_path.stat().st_mtime
-        )
         if self.reorg:
             # the order id can be extracted from the directory name
             order_id = dir_match.group("order_id")
@@ -171,11 +204,10 @@ class FrontierCleanerC4C5:
                 / date_dir_number
                 / formatted_roll_number
             )
+            print(f"  --reorg used, will move scans to: {dest_dir}")
         else:
             # reuse the same directory as the original image
             dest_dir = first_image_path.parent
-
-        print(f"  --reorg used, will move scans to: {dest_dir}")
 
         for image_num, image_path in enumerate(images_glob):
             filename = image_path.stem  # the filename without extension
@@ -190,6 +222,11 @@ class FrontierCleanerC4C5:
                     f"image filename doesn't match expected format: "
                     f"{image_path}"
                 )
+
+            if need_to_convert_bw:
+                with Image(filename=image_path) as original_image:
+                    original_image.type = "grayscale"
+                    original_image.save(filename=image_path)
 
             if str(suffix).lower() == ".bmp":
                 print(f"  converting {image_path} to TIFF")
@@ -260,16 +297,40 @@ class FrontierCleanerC4C5:
         else:
             result = result.strip()
             if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
-                print(
-                    f"  failed to update timestamps on image: {image_path}"
-                )
+                print(f"  failed to update timestamps on image: {image_path}")
                 print(f"  exiftool: {result}")
+
+    def open_image(self, image_path):
+        open_command = ""
+        match platform.system():
+            case "Darwin":
+                open_command = "open"
+            case "Linux":
+                open_command = "xdg-open"
+            case "Windows":
+                open_command = "start"
+            case _:
+                print(
+                    "  Could not determine the OS, skipping viewing the image"
+                )
+                return
+
+        try:
+            subprocess.run(
+                [open_command, str(image_path)],
+                check=True,
+            )
+        except subprocess.CalledProcessError as err:
+            print("  Error while viewing image:")
+            print(err.stdout)
+            print(err.stderr)
 
 
 def cli():
     parser = argparse.ArgumentParser(
         description="Sanitizes Frontier scan files by renaming images and "
-        "optionally reorganizes them into order id directories."
+        "optionally reorganizes them into order id directories. This script "
+        "is meant for use with C4/C5 exporting software."
     )
     parser.add_argument(
         "frontier_export_path",
@@ -304,6 +365,14 @@ def cli():
         "number. default: 2",
     )
 
+    parser.add_argument(
+        "--convert_bw",
+        action="store_true",
+        default=False,
+        help="interactively select orders to convert to true black-and-white. "
+        "default: False",
+    )
+
     args = parser.parse_args()
 
     # the -G and -n are the default common args, -overwrite_original makes sure
@@ -316,6 +385,7 @@ def cli():
             reorg=args.reorg,
             roll_padding=args.roll_padding,
             frame_padding=args.frame_padding,
+            convert_bw=args.convert_bw,
         )
         cleaner.clean()
 

@@ -1,10 +1,15 @@
 import argparse
 import itertools
+import platform
 import re
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import exiftool
+import readchar
+from wand.image import Image
 
 # assume folder structure:
 # YourName_007466/  <- order id + roll number
@@ -37,6 +42,7 @@ class FrontierCleanerMS01:
         exiftool_client,
         frontier_export_path=None,
         reorg=False,
+        convert_bw=False,
         roll_padding=4,
         scanner_model=None,
     ):
@@ -48,10 +54,12 @@ class FrontierCleanerMS01:
         to the current working directory.
         reorg is whether to reorganize all scans into directories based on
         order id and date. Defaults to False.
+        convert_bw is whether to interactively select directories to convert
+        to true black-and-white. Defaults to False.
         roll_padding is how many characters of zero padding to use for the
-        roll number.
+        roll number. Defaults to 4.
         scanner_model is the name of the scanner you used (this will be
-        written to the EXIF data).
+        written to the EXIF data). Defaults to 2.
         """
         self.exiftool = exiftool_client
 
@@ -61,6 +69,7 @@ class FrontierCleanerMS01:
             self.frontier_export_path = Path(frontier_export_path)
 
         self.reorg = reorg
+        self.convert_bw = convert_bw
         self.roll_padding = roll_padding
         self.image_name_matcher = re.compile(self.IMAGE_NAME_PATTERN)
         self.scanner_model = scanner_model or self.DEFAULT_SCANNER_MODEL
@@ -95,11 +104,15 @@ class FrontierCleanerMS01:
     def fix_all_in_dir(self, roll_dir):
         """
         This method does the following to sanitize images:
-        1. Add EXIF tags for capture time to all images.
-        2. Renames all images to simplify.
-        3. Optionally reorganizes the images into a new directory structure.
+        1. Optionally converts all images to B+W (asks for confirmation).
+        2. Add EXIF tags for capture time to all images.
+        3. Renames all images to simplify.
+        4. Optionally reorganizes the images into a new directory structure.
 
-        We first add the DateTimeOriginal EXIF tag to all images, based on the
+        We first optionally convert all images to B+W, prompting the user
+        for confirmation before doing so.
+
+        We then add the DateTimeOriginal EXIF tag to all images, based on the
         filesystem modified timestamp of the file. This fixes the issue where
         rotating a file in Finder or Adobe Bridge will adjust the image's
         modified timestamp, messing up programs that sort by Capture Time
@@ -153,6 +166,26 @@ class FrontierCleanerMS01:
             first_image_path.stat().st_mtime
         )
 
+        need_to_convert_bw = False
+        if self.convert_bw:
+            while True:
+                print(
+                    f"  convert {roll_dir.name} to B+W? "
+                    "[y->yes, n->no/skip, o->view an image]: ",
+                    end="",
+                )
+                sys.stdout.flush()
+                selection = readchar.readchar().lower()
+                print()
+                match selection:
+                    case "y":
+                        need_to_convert_bw = True
+                        break
+                    case "n":
+                        break
+                    case "o":
+                        self.open_image(first_image_path)
+
         # the roll number can be extracted from the directory name
         dir_match = re.match(self.ROLL_DIR_PATTERN, roll_dir.name)
         if not dir_match:
@@ -176,11 +209,10 @@ class FrontierCleanerMS01:
                 / date_dir_number
                 / formatted_roll_number
             )
+            print(f"  --reorg used, will move scans to: {dest_dir}")
         else:
             # reuse the same directory as the original image
             dest_dir = first_image_path.parent
-
-        print(f"  --reorg used, will move scans to: {dest_dir}")
 
         # set of all the "Export JPG NoResize" or "Export TIF NoResize" dirs
         # (which all images are originally stored in)
@@ -202,6 +234,12 @@ class FrontierCleanerMS01:
 
             # add the dir that the image was found in to the export_dirs set
             export_dirs.add(image_path.parent)
+
+            if need_to_convert_bw:
+                print(f"  converting {image_path.name} to B+W")
+                with Image(filename=image_path) as original_image:
+                    original_image.type = "grayscale"
+                    original_image.save(filename=image_path)
 
             # image ordering is preserved in the capture time saved,
             # see above docstring
@@ -273,11 +311,37 @@ class FrontierCleanerMS01:
                 return False
             return True
 
+    def open_image(self, image_path):
+        open_command = ""
+        match platform.system():
+            case "Darwin":
+                open_command = "open"
+            case "Linux":
+                open_command = "xdg-open"
+            case "Windows":
+                open_command = "start"
+            case _:
+                print(
+                    "  Could not determine the OS, skipping viewing the image"
+                )
+                return
+
+        try:
+            subprocess.run(
+                [open_command, str(image_path)],
+                check=True,
+            )
+        except subprocess.CalledProcessError as err:
+            print("  Error while viewing image:")
+            print(err.stdout)
+            print(err.stderr)
+
 
 def cli():
     parser = argparse.ArgumentParser(
         description="Sanitizes Frontier scan files by renaming images and "
-        "optionally reorganizes them into order id directories."
+        "optionally reorganizes them into order id directories. This script "
+        "is meant for use with MS01 exporting software."
     )
     parser.add_argument(
         "frontier_export_path",
@@ -310,6 +374,14 @@ def cli():
         help="the scanner model (used to write EXIF data). default: SP-3000",
     )
 
+    parser.add_argument(
+        "--convert_bw",
+        action="store_true",
+        default=False,
+        help="interactively select orders to convert to true black-and-white. "
+        "default: False",
+    )
+
     args = parser.parse_args()
 
     # the -G and -n are the default common args, -overwrite_original makes sure
@@ -321,6 +393,7 @@ def cli():
             frontier_export_path=args.frontier_export_path,
             reorg=args.reorg,
             roll_padding=args.roll_padding,
+            convert_bw=args.convert_bw,
         )
         cleaner.clean()
 
