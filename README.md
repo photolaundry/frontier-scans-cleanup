@@ -16,7 +16,7 @@ Lastly the exporting software doesn't seem to set the correct DateTime EXIF tags
 
 ## Installation
 TODO: update this when the wheel is easier to find/download.
-The scripts are written and tested in Python 3.9, but likely works for Python 3.6 and newer. To install, use either `pip` or `pipx` to install the `frontier-scans-cleanup` package.
+The scripts are written and tested in Python 3.12, but likely works for Python 3.10 and newer. To install, use either `pip` or `pipx` to install the `frontier-scans-cleanup` package.
 
 *[ImageMagick](https://docs.wand-py.org/en/latest/guide/install.html#install-imagemagick-on-debian-ubuntu)* and *[ExifTool](https://exiftool.org/install.html)* must both be installed for the script to work. For MacOS users, you can alternatively use Homebrew to install both of these packages: `brew install imagemagick exiftool`
 
