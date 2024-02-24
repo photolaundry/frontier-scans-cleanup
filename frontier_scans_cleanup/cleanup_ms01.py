@@ -171,7 +171,8 @@ class FrontierCleanerMS01:
             while True:
                 print(
                     f"  convert {roll_dir.name} to B+W? "
-                    "[y->yes, n->no/skip, o->view an image]: ",
+                    "[y->yes, n->no/skip, o->view the first image, "
+                    "i->inspect the first image for B+W]: ",
                     end="",
                 )
                 sys.stdout.flush()
@@ -183,7 +184,20 @@ class FrontierCleanerMS01:
                         break
                     case "n":
                         break
+                    case "i":
+                        mean, max = self.inspect_image_for_bw(first_image_path)
+                        print(f"  inspecting {first_image_path.name}:")
+                        print(
+                            f"  chroma: mean: {mean:.4f} | max: {max:.4f}"
+                        )
+                        if mean < 0.02 and max < 0.05:
+                            print("  is B+W? likely")
+                        else:
+                            print("  is B+W? unlikely")
                     case "o":
+                        print(
+                            f"  opening {first_image_path.name} for viewing..."
+                        )
                         self.open_image(first_image_path)
 
         # the roll number can be extracted from the directory name
@@ -335,6 +349,14 @@ class FrontierCleanerMS01:
             print("  Error while viewing image:")
             print(err.stdout)
             print(err.stderr)
+
+    def inspect_image_for_bw(self, image_path):
+        with Image(filename=image_path) as img:
+            img.transform_colorspace("hcl")
+            # the "green" channel is the C channel, C for chroma
+            mean, stddev = img.mean_channel("green")
+            min, max = img.range_channel("green")
+            return (mean / img.quantum_range, max / img.quantum_range)
 
 
 def cli():
