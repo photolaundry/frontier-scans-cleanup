@@ -34,7 +34,7 @@ class FrontierCleanerMS01:
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     ROLL_DIR_PATTERN = r"(?P<order_id>.{1,10})_(?P<roll_number>\d{6})"
     ROLL_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
-    IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>\d{1,4}A?(_\d{4})?)"
+    IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>\d{1,4}(A|E)?(_\d{4})?)"
     DEFAULT_SCANNER_MODEL = "SP-3000"
 
     def __init__(
@@ -239,7 +239,7 @@ class FrontierCleanerMS01:
             if not image_path.is_file():
                 continue
 
-            img_match = self.image_name_matcher.match(filename)
+            img_match = self.image_name_matcher.fullmatch(filename)
             if not img_match:
                 raise ValueError(
                     f"image filename doesn't match expected format: "
