@@ -34,7 +34,7 @@ class FrontierCleanerMS01:
     EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE = "1 image files updated"
     ROLL_DIR_PATTERN = r"(?P<order_id>.{1,10})_(?P<roll_number>\d{6})"
     ROLL_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
-    IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>\d{1,4}(A|E)?(_\d{4})?)"
+    IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>.+)"
     DEFAULT_SCANNER_MODEL = "SP-3000"
 
     def __init__(
