@@ -36,6 +36,19 @@ class FrontierCleanerMS01:
     ROLL_DIR_GLOB_PATTERN = "*_" + "[0-9]" * 6
     IMAGE_NAME_PATTERN = r"R1-\d{5}-(?P<frame_info>.+)"
     DEFAULT_SCANNER_MODEL = "SP-3000"
+    # mapping from frame_info to a numeric key (for sorting)
+    # start with X and 00
+    FRAME_INFO_KEY = ("X", "00")
+    # frames 0 through 40
+    FRAME_INFO_KEY = FRAME_INFO_KEY + tuple(map(str, range(41)))
+    # interlace all the A half-frame numbers
+    FRAME_INFO_KEY = tuple(
+        f"{left}{right}" for left in FRAME_INFO_KEY for right in ("", "A")
+    )
+    # add E at the very end
+    FRAME_INFO_KEY = FRAME_INFO_KEY + ("E",)
+    # convert to dict for efficient mapping from str to number
+    FRAME_INFO_KEY = {k: i for i, k in enumerate(FRAME_INFO_KEY)}
 
     def __init__(
         self,
@@ -59,7 +72,7 @@ class FrontierCleanerMS01:
         roll_padding is how many characters of zero padding to use for the
         roll number. Defaults to 4.
         scanner_model is the name of the scanner you used (this will be
-        written to the EXIF data). Defaults to 2.
+        written to the EXIF data). Defaults to "SP-3000".
         """
         self.exiftool = exiftool_client
 
@@ -146,7 +159,15 @@ class FrontierCleanerMS01:
         operate on.
         """
         print(f"working on dir: {roll_dir}")
-        images_glob = sorted(
+
+        # the roll number can be extracted from the directory name
+        dir_match = re.match(self.ROLL_DIR_PATTERN, roll_dir.name)
+        if not dir_match:
+            raise ValueError(
+                f"image dir doesn't match expected format: {roll_dir}"
+            )
+
+        images = list(
             itertools.chain(
                 roll_dir.glob("**/*.jpg"),
                 roll_dir.glob("**/*.tif"),
@@ -157,11 +178,43 @@ class FrontierCleanerMS01:
             )
         )
 
-        if not images_glob:
+        if not images:
             print(f"  No images found, skipping: {roll_dir}")
             return
 
-        first_image_path = images_glob[0]
+        img_matches = {
+            img_path: self.image_name_matcher.fullmatch(img_path.stem)
+            for img_path in images
+        }
+        bad_matches = tuple(
+            img_path for img_path, match in img_matches.items() if not match
+        )
+        if bad_matches:
+            raise ValueError(
+                f"image filename doesn't match expected format: "
+                f"{bad_matches[0]}"
+            )
+
+        # check a random image to see if the filename indicates this is
+        # a half-frame roll
+        rand_image = images[0]
+        rand_image_match = img_matches[rand_image]
+        rand_frame_info = rand_image_match.group("frame_info")
+        if "-" in rand_frame_info:
+            # this is a half-frame roll that uses "0-0A" file naming so
+            # key on just the left side using the special FRAME_INFO_KEY ordering
+            def key(img_path):
+                img_frame_info = img_matches[img_path].group("frame_info")
+                left, right = img_frame_info.split("-")
+                return self.FRAME_INFO_KEY[left]
+
+            images.sort(key=key)
+        else:
+            # not a half-frame roll, so sort via normal string comparison
+            # like the old behavior
+            images.sort()
+
+        first_image_path = images[0]
         first_image_mtime = datetime.fromtimestamp(
             first_image_path.stat().st_mtime
         )
@@ -187,9 +240,7 @@ class FrontierCleanerMS01:
                     case "i":
                         mean, max = self.inspect_image_for_bw(first_image_path)
                         print(f"  inspecting {first_image_path.name}:")
-                        print(
-                            f"  chroma: mean: {mean:.4f} | max: {max:.4f}"
-                        )
+                        print(f"  chroma: mean: {mean:.4f} | max: {max:.4f}")
                         if mean < 0.02 and max < 0.05:
                             print("  is B+W? likely")
                         else:
@@ -200,12 +251,6 @@ class FrontierCleanerMS01:
                         )
                         self.open_image(first_image_path)
 
-        # the roll number can be extracted from the directory name
-        dir_match = re.match(self.ROLL_DIR_PATTERN, roll_dir.name)
-        if not dir_match:
-            raise ValueError(
-                f"image dir doesn't match expected format: {roll_dir}"
-            )
         roll_number = dir_match.group("roll_number")
         # convert roll number to an int, and then zero pad it as desired
         formatted_roll_number = f"{int(roll_number):0>{self.roll_padding}d}"
@@ -232,19 +277,13 @@ class FrontierCleanerMS01:
         # (which all images are originally stored in)
         export_dirs = set()
 
-        for image_num, image_path in enumerate(images_glob):
-            filename = image_path.stem  # the filename without extension
+        for image_num, image_path in enumerate(images):
             suffix = image_path.suffix  # the extension including the .
 
             if not image_path.is_file():
                 continue
 
-            img_match = self.image_name_matcher.fullmatch(filename)
-            if not img_match:
-                raise ValueError(
-                    f"image filename doesn't match expected format: "
-                    f"{image_path}"
-                )
+            img_match = img_matches[image_path]
 
             # add the dir that the image was found in to the export_dirs set
             export_dirs.add(image_path.parent)
@@ -318,8 +357,7 @@ class FrontierCleanerMS01:
             result = result.strip()
             if result != self.EXIFTOOL_SUCCESSFUL_WRITE_MESSAGE:
                 print(
-                    f"  failed to update timestamps on image: "
-                    f"  {image_path}"
+                    f"  failed to update timestamps on image:   {image_path}"
                 )
                 print(f"  exiftool: {result}")
                 return False
