@@ -1,17 +1,19 @@
-[tool.poetry]
+[project]
 name = "frontier-scans-cleanup"
 version = "0.5.0"
 description = "A script to fix metadata and reorganize film scans from Fujifilm Frontier scanners."
-authors = ["Bobo Li <bobo@photolaundrysf.com>"]
+authors = [
+    { name = "Bobo Li", email = "bobo@photolaundrysf.com" },
+]
 readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "wand>=0.6.11",
+    "pyexiftool>=0.5.6",
+    "readchar>=4.0.5"
+]
 
-[tool.poetry.dependencies]
-python = "^3.7"
-Wand = "^0.6.11"
-PyExifTool = "^0.5.6"
-readchar = "^4.0.5"
-
-[tool.poetry.scripts]
+[project.scripts]
 frontier-clean-c4c5 = "frontier_scans_cleanup.cleanup_c4c5:cli"
 frontier-clean-ms01 = "frontier_scans_cleanup.cleanup_ms01:cli"
 
@@ -19,5 +21,5 @@ frontier-clean-ms01 = "frontier_scans_cleanup.cleanup_ms01:cli"
 line-length = 79
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
